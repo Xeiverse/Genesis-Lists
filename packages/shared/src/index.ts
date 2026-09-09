@@ -1,0 +1,74 @@
+import { z } from "zod";
+
+export const usernameSchema = z
+  .string()
+  .min(3)
+  .max(32)
+  .regex(/^[a-zA-Z0-9_-]+$/);
+
+export const passwordSchema = z.string().min(8).max(128);
+
+export const authCredentialsSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema,
+});
+
+export type AuthCredentials = z.infer<typeof authCredentialsSchema>;
+
+export const createListSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+
+export const updateListSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+});
+
+export const createItemSchema = z.object({
+  text: z.string().trim().min(1).max(500),
+});
+
+export const updateItemSchema = z
+  .object({
+    text: z.string().trim().min(1).max(500).optional(),
+    checked: z.boolean().optional(),
+    position: z.number().int().min(0).optional(),
+  })
+  .refine((v) => v.text !== undefined || v.checked !== undefined || v.position !== undefined, {
+    message: "At least one field required",
+  });
+
+export type UserDto = {
+  id: string;
+  username: string;
+};
+
+export type ListDto = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ListItemDto = {
+  id: string;
+  listId: string;
+  text: string;
+  checked: boolean;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ErrorCode =
+  | "VALIDATION_ERROR"
+  | "UNAUTHORIZED"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "INTERNAL_ERROR";
+
+export type ApiErrorBody = {
+  error: {
+    code: ErrorCode;
+    message: string;
+  };
+};

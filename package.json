@@ -1,0 +1,16 @@
+{
+  "name": "genesis-lists",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @genesis-lists/shared build && pnpm -r --parallel --filter @genesis-lists/server --filter @genesis-lists/web dev",
+    "build": "pnpm -r --filter @genesis-lists/shared --filter @genesis-lists/server --filter @genesis-lists/web build",
+    "test": "pnpm --filter @genesis-lists/server test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

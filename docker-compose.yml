@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-string}
+      DATABASE_PATH: /data/app.db
+      STATIC_DIR: /app/apps/web/dist
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      NODE_ENV: production
+      PORT: 3000
+    volumes:
+      - genesis-data:/data
+    restart: unless-stopped
+
+volumes:
+  genesis-data:

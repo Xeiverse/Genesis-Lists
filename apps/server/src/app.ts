@@ -18,9 +18,44 @@ async function buildFastify(config: AppConfig) {
   const db = createDb(config.databasePath);
   const app = Fastify({ logger: false });
 
+  // Empty bodies with Content-Type: application/json (common from fetch clients) must not 500.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      const text = typeof body === "string" ? body.trim() : "";
+      if (!text) {
+        done(null, null);
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch {
+        const err = new Error("Invalid JSON body") as Error & {
+          statusCode: number;
+          code: string;
+        };
+        err.statusCode = 400;
+        err.code = "VALIDATION_ERROR";
+        done(err, undefined);
+      }
+    },
+  );
+
   app.setErrorHandler((err, _request, reply) => {
     app.log.error?.(err);
     if (reply.sent) return;
+    const error = err as Error & { statusCode?: number };
+    const status =
+      typeof error.statusCode === "number" ? error.statusCode : 500;
+    if (status >= 400 && status < 500) {
+      return sendError(
+        reply,
+        status,
+        "VALIDATION_ERROR",
+        error.message || "Invalid request body",
+      );
+    }
     return sendError(reply, 500, "INTERNAL_ERROR", "Internal server error");
   });
 

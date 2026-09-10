@@ -171,17 +171,7 @@ export function ListsPage() {
     if (!active) return;
     try {
       const updated = await api.renameList(active.id, nameInput.trim());
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === updated.id
-            ? {
-                ...l,
-                name: updated.name,
-                updatedAt: updated.updatedAt,
-              }
-            : l,
-        ),
-      );
+      setLists((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
       setRenameOpen(false);
       setActive(null);
     } catch (e) {

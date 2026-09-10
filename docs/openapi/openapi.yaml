@@ -398,13 +398,17 @@ components:
           format: date-time
         previewItems:
           type: array
-          description: First items by position for homepage tiles (up to 5)
+          description: >
+            First items by position for homepage tiles (up to 5).
+            Populated on GET /api/lists and PATCH /api/lists/{id}; empty on create.
           items:
             $ref: '#/components/schemas/ListItemPreview'
         itemCount:
           type: integer
           minimum: 0
-          description: Total items in the list; used with previewItems for "+N more"
+          description: >
+            Total items in the list; used with previewItems for "+N more".
+            Populated on GET /api/lists and PATCH /api/lists/{id}; 0 on create.
 
     CreateListRequest:
       type: object

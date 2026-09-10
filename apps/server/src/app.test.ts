@@ -111,6 +111,8 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(list.statusCode, 200);
     assert.equal(list.json().lists.length, 1);
     assert.equal(list.json().lists[0].name, "Groceries");
+    assert.deepEqual(list.json().lists[0].previewItems, []);
+    assert.equal(list.json().lists[0].itemCount, 0);
   });
 
   await it("bob cannot see alice lists", async () => {
@@ -143,6 +145,18 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(create.statusCode, 201);
     itemId = create.json().id;
     assert.equal(create.json().checked, false);
+
+    const listsWithPreview = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(listsWithPreview.statusCode, 200);
+    const previewList = listsWithPreview.json().lists[0];
+    assert.equal(previewList.itemCount, 1);
+    assert.equal(previewList.previewItems.length, 1);
+    assert.equal(previewList.previewItems[0].text, "Milk");
+    assert.equal(previewList.previewItems[0].checked, false);
 
     const patch = await app.inject({
       method: "PATCH",

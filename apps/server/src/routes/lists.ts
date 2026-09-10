@@ -6,16 +6,33 @@ import {
   updateListSchema,
   type ListDto,
   type ListItemDto,
+  type ListItemPreviewDto,
 } from "@genesis-lists/shared";
 import type { Db, ItemRow, ListRow } from "../db/index.js";
 import { nowIso, requireUser, sendError, uuid } from "../util.js";
 
-function toListDto(row: ListRow): ListDto {
+const PREVIEW_ITEM_LIMIT = 5;
+
+function toListDto(
+  row: ListRow,
+  previewItems: ListItemPreviewDto[] = [],
+  itemCount = 0,
+): ListDto {
   return {
     id: row.id,
     name: row.name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    previewItems,
+    itemCount,
+  };
+}
+
+function toPreviewDto(row: ItemRow): ListItemPreviewDto {
+  return {
+    id: row.id,
+    text: row.text,
+    checked: row.checked === 1,
   };
 }
 
@@ -40,7 +57,49 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       .prepare(`SELECT * FROM lists WHERE owner_id = ? ORDER BY created_at ASC`)
       .all(user.id) as ListRow[];
 
-    return reply.send({ lists: rows.map(toListDto) });
+    if (rows.length === 0) {
+      return reply.send({ lists: [] });
+    }
+
+    const listIds = rows.map((r) => r.id);
+    const placeholders = listIds.map(() => "?").join(", ");
+
+    const countRows = db
+      .prepare(
+        `SELECT list_id, COUNT(*) AS cnt FROM list_items
+         WHERE list_id IN (${placeholders})
+         GROUP BY list_id`,
+      )
+      .all(...listIds) as { list_id: string; cnt: number }[];
+
+    const countByList = new Map(countRows.map((r) => [r.list_id, r.cnt]));
+
+    const itemRows = db
+      .prepare(
+        `SELECT * FROM list_items
+         WHERE list_id IN (${placeholders})
+         ORDER BY list_id ASC, position ASC`,
+      )
+      .all(...listIds) as ItemRow[];
+
+    const previewByList = new Map<string, ListItemPreviewDto[]>();
+    for (const item of itemRows) {
+      const bucket = previewByList.get(item.list_id) ?? [];
+      if (bucket.length < PREVIEW_ITEM_LIMIT) {
+        bucket.push(toPreviewDto(item));
+        previewByList.set(item.list_id, bucket);
+      }
+    }
+
+    return reply.send({
+      lists: rows.map((row) =>
+        toListDto(
+          row,
+          previewByList.get(row.id) ?? [],
+          countByList.get(row.id) ?? 0,
+        ),
+      ),
+    });
   });
 
   app.post("/api/lists", async (request, reply) => {

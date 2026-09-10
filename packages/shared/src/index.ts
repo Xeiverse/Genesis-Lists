@@ -42,11 +42,19 @@ export type UserDto = {
   username: string;
 };
 
+export type ListItemPreviewDto = {
+  id: string;
+  text: string;
+  checked: boolean;
+};
+
 export type ListDto = {
   id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
+  previewItems: ListItemPreviewDto[];
+  itemCount: number;
 };
 
 export type ListItemDto = {

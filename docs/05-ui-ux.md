@@ -25,7 +25,7 @@
 ### 3. Lists home
 
 - Top app bar: product name “Genesis Lists”, overflow/logout.
-- Body: vertical list of the user’s lists (name + optional item count if cheap to show).
+- Body: responsive grid of list tiles (1 column on narrow screens, 2 on wider). Each tile shows the list title and a preview of items (up to 5, with “+N more” when truncated).
 - Empty state: short copy + CTA to create first list.
 - Primary create action: FAB or app-bar action “New list”.
 - Create: dialog or inline prompt for name.

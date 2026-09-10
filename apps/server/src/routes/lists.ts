@@ -36,6 +36,24 @@ function toPreviewDto(row: ItemRow): ListItemPreviewDto {
   };
 }
 
+function loadListPreview(db: Db, listId: string): {
+  previewItems: ListItemPreviewDto[];
+  itemCount: number;
+} {
+  const countRow = db
+    .prepare(`SELECT COUNT(*) AS cnt FROM list_items WHERE list_id = ?`)
+    .get(listId) as { cnt: number };
+  const previewRows = db
+    .prepare(
+      `SELECT * FROM list_items WHERE list_id = ? ORDER BY position ASC LIMIT ?`,
+    )
+    .all(listId, PREVIEW_ITEM_LIMIT) as ItemRow[];
+  return {
+    previewItems: previewRows.map(toPreviewDto),
+    itemCount: countRow.cnt,
+  };
+}
+
 function toItemDto(row: ItemRow): ListItemDto {
   return {
     id: row.id,
@@ -76,19 +94,22 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
 
     const itemRows = db
       .prepare(
-        `SELECT * FROM list_items
-         WHERE list_id IN (${placeholders})
-         ORDER BY list_id ASC, position ASC`,
+        `SELECT id, list_id, text, checked, position, created_at, updated_at
+         FROM (
+           SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY position ASC) AS rn
+           FROM list_items
+           WHERE list_id IN (${placeholders})
+         )
+         WHERE rn <= ?`,
       )
-      .all(...listIds) as ItemRow[];
+      .all(...listIds, PREVIEW_ITEM_LIMIT) as ItemRow[];
 
     const previewByList = new Map<string, ListItemPreviewDto[]>();
     for (const item of itemRows) {
       const bucket = previewByList.get(item.list_id) ?? [];
-      if (bucket.length < PREVIEW_ITEM_LIMIT) {
-        bucket.push(toPreviewDto(item));
-        previewByList.set(item.list_id, bucket);
-      }
+      bucket.push(toPreviewDto(item));
+      previewByList.set(item.list_id, bucket);
     }
 
     return reply.send({
@@ -153,8 +174,13 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       id,
     );
 
+    const { previewItems, itemCount } = loadListPreview(db, id);
     return reply.send(
-      toListDto({ ...existing, name: parsed.data.name, updated_at: updatedAt }),
+      toListDto(
+        { ...existing, name: parsed.data.name, updated_at: updatedAt },
+        previewItems,
+        itemCount,
+      ),
     );
   });
 

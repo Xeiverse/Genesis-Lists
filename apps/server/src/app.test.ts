@@ -133,6 +133,8 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json().name, "Weekly shop");
+    assert.equal(res.json().itemCount, 0);
+    assert.deepEqual(res.json().previewItems, []);
   });
 
   await it("add edit toggle delete items", async () => {
@@ -157,6 +159,16 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(previewList.previewItems.length, 1);
     assert.equal(previewList.previewItems[0].text, "Milk");
     assert.equal(previewList.previewItems[0].checked, false);
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/lists/${listId}`,
+      headers: { cookie: cookieA },
+      payload: { name: "Weekly shop" },
+    });
+    assert.equal(renamed.statusCode, 200);
+    assert.equal(renamed.json().itemCount, 1);
+    assert.equal(renamed.json().previewItems[0].text, "Milk");
 
     const patch = await app.inject({
       method: "PATCH",
@@ -236,5 +248,16 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 401);
     assert.equal(res.json().error.code, "UNAUTHORIZED");
+  });
+
+  await it("malformed JSON body returns 400", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { "content-type": "application/json" },
+      payload: "{not-json",
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, "VALIDATION_ERROR");
   });
 });

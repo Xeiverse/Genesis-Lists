@@ -178,7 +178,7 @@ describe("Genesis Lists API contract", async () => {
     const del = await app.inject({
       method: "DELETE",
       url: `/api/items/${itemId}`,
-      headers: { cookie: cookieA },
+      headers: { cookie: cookieA, "content-type": "application/json" },
     });
     assert.equal(del.statusCode, 204);
   });

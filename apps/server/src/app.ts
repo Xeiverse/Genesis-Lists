@@ -18,6 +18,23 @@ async function buildFastify(config: AppConfig) {
   const db = createDb(config.databasePath);
   const app = Fastify({ logger: false });
 
+  // Empty bodies with Content-Type: application/json (common from fetch clients) must not 500.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      if (!body || body.length === 0) {
+        done(null, null);
+        return;
+      }
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    },
+  );
+
   app.setErrorHandler((err, _request, reply) => {
     app.log.error?.(err);
     if (reply.sent) return;

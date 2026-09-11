@@ -16,7 +16,6 @@ import {
   ListItem,
   ListItemIcon,
   ListItemSecondaryAction,
-  ListItemText,
   Menu,
   MenuItem,
   Stack,
@@ -41,13 +40,15 @@ export function ListDetailPage() {
   const [newText, setNewText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [nameInput, setNameInput] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const skipBlurSave = useRef(false);
+  const skipTitleBlurSave = useRef(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -78,6 +79,13 @@ export function ListDetailPage() {
       editInputRef.current?.select();
     }
   }, [editingId]);
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingTitle]);
 
   async function addItem(e: FormEvent) {
     e.preventDefault();
@@ -143,6 +151,46 @@ export function ListDetailPage() {
     }
   }
 
+  function startTitleEdit() {
+    skipTitleBlurSave.current = false;
+    setTitleDraft(title);
+    setEditingTitle(true);
+  }
+
+  function cancelTitleEdit() {
+    skipTitleBlurSave.current = true;
+    setEditingTitle(false);
+    setTitleDraft("");
+  }
+
+  async function commitTitleEdit() {
+    const name = titleDraft.trim();
+    if (!name || name === title) {
+      setEditingTitle(false);
+      setTitleDraft("");
+      return;
+    }
+    try {
+      const updated = await api.renameList(id, name);
+      setTitle(updated.name);
+      setEditingTitle(false);
+      setTitleDraft("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Rename failed");
+    }
+  }
+
+  function onTitleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      skipTitleBlurSave.current = true;
+      void commitTitleEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelTitleEdit();
+    }
+  }
+
   async function removeItem(item: ListItemDto) {
     try {
       await api.deleteItem(item.id);
@@ -153,16 +201,6 @@ export function ListDetailPage() {
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
-    }
-  }
-
-  async function handleRename() {
-    try {
-      const updated = await api.renameList(id, nameInput.trim());
-      setTitle(updated.name);
-      setRenameOpen(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Rename failed");
     }
   }
 
@@ -182,9 +220,55 @@ export function ListDetailPage() {
           <IconButton edge="start" color="inherit" onClick={() => navigate("/")} aria-label="back">
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }} noWrap>
-            {title}
-          </Typography>
+          {editingTitle ? (
+            <TextField
+              inputRef={titleInputRef}
+              size="small"
+              fullWidth
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={onTitleKeyDown}
+              onBlur={() => {
+                if (skipTitleBlurSave.current) {
+                  skipTitleBlurSave.current = false;
+                  return;
+                }
+                void commitTitleEdit();
+              }}
+              aria-label="List name"
+              variant="standard"
+              sx={{
+                flexGrow: 1,
+                mr: 1,
+                "& .MuiInputBase-input": {
+                  color: "inherit",
+                  typography: "h6",
+                  py: 0.5,
+                },
+                "& .MuiInput-underline:before": { borderBottomColor: "rgba(255,255,255,0.42)" },
+                "& .MuiInput-underline:hover:before": { borderBottomColor: "rgba(255,255,255,0.7)" },
+                "& .MuiInput-underline:after": { borderBottomColor: "inherit" },
+              }}
+            />
+          ) : (
+            <Typography
+              variant="h6"
+              sx={{ flexGrow: 1, cursor: "pointer" }}
+              noWrap
+              onClick={startTitleEdit}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  startTitleEdit();
+                }
+              }}
+              aria-label="Edit list name"
+            >
+              {title}
+            </Typography>
+          )}
           <IconButton
             color="inherit"
             aria-label="list menu"
@@ -206,56 +290,75 @@ export function ListDetailPage() {
           </Typography>
         ) : (
           <List>
-            {items.map((item) => (
-              <ListItem key={item.id} disablePadding sx={{ pr: 6, alignItems: "center" }}>
-                <ListItemIcon sx={{ minWidth: 42 }}>
-                  <Checkbox
-                    edge="start"
-                    checked={item.checked}
-                    onChange={() => void toggle(item)}
-                    inputProps={{ "aria-label": `toggle ${item.text}` }}
-                  />
-                </ListItemIcon>
-                {editingId === item.id ? (
+            {items.map((item) => {
+              const isEditing = editingId === item.id;
+              return (
+                <ListItem key={item.id} disablePadding sx={{ pr: 6, alignItems: "center", minHeight: 48 }}>
+                  <ListItemIcon sx={{ minWidth: 42 }}>
+                    <Checkbox
+                      edge="start"
+                      checked={item.checked}
+                      onChange={() => void toggle(item)}
+                      inputProps={{ "aria-label": `toggle ${item.text}` }}
+                    />
+                  </ListItemIcon>
                   <TextField
-                    inputRef={editInputRef}
-                    size="small"
+                    inputRef={isEditing ? editInputRef : undefined}
+                    variant="standard"
                     fullWidth
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={onEditKeyDown}
+                    value={isEditing ? editText : item.text}
+                    onChange={(e) => {
+                      if (isEditing) setEditText(e.target.value);
+                    }}
+                    onClick={() => {
+                      if (!isEditing) startEdit(item);
+                    }}
+                    onFocus={() => {
+                      if (!isEditing) startEdit(item);
+                    }}
+                    onKeyDown={isEditing ? onEditKeyDown : undefined}
                     onBlur={() => {
+                      if (!isEditing) return;
                       if (skipBlurSave.current) {
                         skipBlurSave.current = false;
                         return;
                       }
                       void commitEdit();
                     }}
-                    aria-label={`Edit ${item.text}`}
-                    sx={{ my: 0.5, mr: 1 }}
-                  />
-                ) : (
-                  <ListItemText
-                    primary={item.text}
-                    onClick={() => startEdit(item)}
+                    InputProps={{
+                      readOnly: !isEditing,
+                      disableUnderline: !isEditing,
+                    }}
+                    inputProps={{
+                      "aria-label": isEditing ? `Edit ${item.text}` : item.text,
+                    }}
                     sx={{
-                      textDecoration: item.checked ? "line-through" : "none",
-                      opacity: item.checked ? 0.6 : 1,
-                      cursor: "pointer",
+                      mr: 1,
+                      minHeight: 40,
+                      justifyContent: "center",
+                      "& .MuiInputBase-root": {
+                        minHeight: 40,
+                      },
+                      "& .MuiInputBase-input": {
+                        cursor: isEditing ? "text" : "pointer",
+                        py: 1,
+                        textDecoration: item.checked && !isEditing ? "line-through" : "none",
+                        opacity: item.checked && !isEditing ? 0.6 : 1,
+                      },
                     }}
                   />
-                )}
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    aria-label={`delete ${item.text}`}
-                    onClick={() => void removeItem(item)}
-                  >
-                    <DeleteOutlineIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      aria-label={`delete ${item.text}`}
+                      onClick={() => void removeItem(item)}
+                    >
+                      <DeleteOutlineIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              );
+            })}
           </List>
         )}
       </Container>
@@ -291,8 +394,7 @@ export function ListDetailPage() {
         <MenuItem
           onClick={() => {
             setMenuAnchor(null);
-            setNameInput(title);
-            setRenameOpen(true);
+            startTitleEdit();
           }}
         >
           Rename list
@@ -306,28 +408,6 @@ export function ListDetailPage() {
           Delete list
         </MenuItem>
       </Menu>
-
-      <Dialog open={renameOpen} onClose={() => setRenameOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Rename list</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Name"
-            fullWidth
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button variant="text" onClick={() => setRenameOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => void handleRename()} disabled={!nameInput.trim()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete list?</DialogTitle>

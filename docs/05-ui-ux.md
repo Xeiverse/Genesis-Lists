@@ -24,7 +24,7 @@
 
 ### 3. Lists home
 
-- Top app bar: product name “Genesis Lists”, username menu (Settings, Log out).
+- Top app bar: product name “Genesis Lists”, circular avatar with username initial opening a menu (Settings, Log out).
 - Search field below the app bar: filters lists by name or preview item text (client-side).
 - Body: Keep-style multi-column masonry of list cards (1 / 2 / 3 columns by breakpoint). Card heights vary with preview content; cards do not stretch to match neighbors in a row.
 - Each card: list name, up to 8 preview item lines (checked items struck through), optional “+N more”, overflow (rename/delete).
@@ -36,8 +36,8 @@
 
 ### 4. List detail
 
-- App bar: back, list title, overflow (rename/delete list).
-- Checklist: each row = checkbox + text; tap checkbox toggles; tap text to edit **inline** (Enter/blur save, Escape cancel).
+- App bar: back, list title (tap to **inline** rename; Enter/blur save, Escape cancel), overflow (rename starts inline edit; delete list).
+- Checklist: each row = checkbox + text field; tap checkbox toggles; tap/focus text to edit **inline** without layout shift (Enter/blur save, Escape cancel).
 - Delete item via trailing icon.
 - Sticky/bottom add row: text field + add button.
 - Empty state when no items.

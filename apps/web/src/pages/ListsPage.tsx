@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
   Card,
@@ -116,14 +117,25 @@ export function ListsPage() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Genesis Lists
           </Typography>
-          <Button
+          <IconButton
             color="inherit"
             onClick={(e) => setAccountAnchor(e.currentTarget)}
             aria-haspopup="menu"
-            aria-label="account menu"
+            aria-label={
+              user?.username ? `Account menu for ${user.username}` : "Account menu"
+            }
           >
-            {user?.username}
-          </Button>
+            <Avatar
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: "primary.dark",
+                fontSize: "0.875rem",
+              }}
+            >
+              {(user?.username?.[0] ?? "?").toUpperCase()}
+            </Avatar>
+          </IconButton>
         </Toolbar>
       </AppBar>
 

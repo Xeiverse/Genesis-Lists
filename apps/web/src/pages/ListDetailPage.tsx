@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AppBar,
@@ -43,9 +43,11 @@ export function ListDetailPage() {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editItem, setEditItem] = useState<ListItemDto | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [nameInput, setNameInput] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const skipBlurSave = useRef(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -70,6 +72,13 @@ export function ListDetailPage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (editingId) {
+      editInputRef.current?.focus();
+      editInputRef.current?.select();
+    }
+  }, [editingId]);
+
   async function addItem(e: FormEvent) {
     e.preventDefault();
     const text = newText.trim();
@@ -92,14 +101,45 @@ export function ListDetailPage() {
     }
   }
 
-  async function saveEdit() {
-    if (!editItem) return;
+  function startEdit(item: ListItemDto) {
+    skipBlurSave.current = false;
+    setEditingId(item.id);
+    setEditText(item.text);
+  }
+
+  function cancelEdit() {
+    skipBlurSave.current = true;
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function commitEdit() {
+    if (!editingId) return;
+    const item = items.find((i) => i.id === editingId);
+    const text = editText.trim();
+    if (!item || !text || text === item.text) {
+      setEditingId(null);
+      setEditText("");
+      return;
+    }
     try {
-      const updated = await api.updateItem(editItem.id, { text: editText.trim() });
+      const updated = await api.updateItem(editingId, { text });
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
-      setEditItem(null);
+      setEditingId(null);
+      setEditText("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Edit failed");
+    }
+  }
+
+  function onEditKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      skipBlurSave.current = true;
+      void commitEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelEdit();
     }
   }
 
@@ -107,6 +147,10 @@ export function ListDetailPage() {
     try {
       await api.deleteItem(item.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+      if (editingId === item.id) {
+        setEditingId(null);
+        setEditText("");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
     }
@@ -163,7 +207,7 @@ export function ListDetailPage() {
         ) : (
           <List>
             {items.map((item) => (
-              <ListItem key={item.id} disablePadding sx={{ pr: 6 }}>
+              <ListItem key={item.id} disablePadding sx={{ pr: 6, alignItems: "center" }}>
                 <ListItemIcon sx={{ minWidth: 42 }}>
                   <Checkbox
                     edge="start"
@@ -172,18 +216,35 @@ export function ListDetailPage() {
                     inputProps={{ "aria-label": `toggle ${item.text}` }}
                   />
                 </ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  onClick={() => {
-                    setEditItem(item);
-                    setEditText(item.text);
-                  }}
-                  sx={{
-                    textDecoration: item.checked ? "line-through" : "none",
-                    opacity: item.checked ? 0.6 : 1,
-                    cursor: "pointer",
-                  }}
-                />
+                {editingId === item.id ? (
+                  <TextField
+                    inputRef={editInputRef}
+                    size="small"
+                    fullWidth
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={onEditKeyDown}
+                    onBlur={() => {
+                      if (skipBlurSave.current) {
+                        skipBlurSave.current = false;
+                        return;
+                      }
+                      void commitEdit();
+                    }}
+                    aria-label={`Edit ${item.text}`}
+                    sx={{ my: 0.5, mr: 1 }}
+                  />
+                ) : (
+                  <ListItemText
+                    primary={item.text}
+                    onClick={() => startEdit(item)}
+                    sx={{
+                      textDecoration: item.checked ? "line-through" : "none",
+                      opacity: item.checked ? 0.6 : 1,
+                      cursor: "pointer",
+                    }}
+                  />
+                )}
                 <ListItemSecondaryAction>
                   <IconButton
                     edge="end"
@@ -245,28 +306,6 @@ export function ListDetailPage() {
           Delete list
         </MenuItem>
       </Menu>
-
-      <Dialog open={Boolean(editItem)} onClose={() => setEditItem(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Edit item</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Text"
-            fullWidth
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button variant="text" onClick={() => setEditItem(null)}>
-            Cancel
-          </Button>
-          <Button onClick={() => void saveEdit()} disabled={!editText.trim()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={renameOpen} onClose={() => setRenameOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Rename list</DialogTitle>

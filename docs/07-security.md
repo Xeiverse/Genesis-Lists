@@ -31,9 +31,11 @@ See [01-requirements.md](01-requirements.md). Reject oversize bodies; enforce ma
 
 ## Out of scope for MVP security features
 
-- Email verification, 2FA, password reset flows
+- Email verification, 2FA, email-based password **reset** flows
 - OIDC / SSO
 - Fine-grained RBAC beyond owner isolation
 - Audit log UI
+
+Authenticated password **change** (current + new password) is in scope; see `POST /api/auth/change-password`.
 
 Operators should keep the instance private (VPN / auth proxy) if exposed to the public internet without additional hardening.

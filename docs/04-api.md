@@ -36,12 +36,13 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 | POST | `/api/auth/login` | No | Create session |
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/auth/me` | Yes | Current user |
+| POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }` |
 
 ### Lists
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by current user |
+| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` + `itemCount`) |
 | POST | `/api/lists` | Yes | Create list `{ "name": "..." }` |
 | PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` |
 | DELETE | `/api/lists/{id}` | Yes | Delete list + items |

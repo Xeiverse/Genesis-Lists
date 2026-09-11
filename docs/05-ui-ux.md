@@ -4,7 +4,7 @@
 
 - Calm, utilitarian shopping-list UX (not a marketing site).
 - Material Design 3 via MUI: tonal surfaces, rounded controls, clear hierarchy.
-- Mobile-first; usable at ~360px width; comfortable on desktop with a max content width (~720px).
+- Mobile-first; usable at ~360px width; comfortable on desktop with a max content width (~960px for home masonry).
 
 ## Screens
 
@@ -24,26 +24,35 @@
 
 ### 3. Lists home
 
-- Top app bar: product name “Genesis Lists”, overflow/logout.
-- Body: vertical list of the user’s lists (name + optional item count if cheap to show).
+- Top app bar: product name “Genesis Lists”, username menu (Settings, Log out).
+- Search field below the app bar: filters lists by name or preview item text (client-side).
+- Body: Keep-style multi-column masonry of list cards (1 / 2 / 3 columns by breakpoint). Card heights vary with preview content; cards do not stretch to match neighbors in a row.
+- Each card: list name, up to 8 preview item lines (checked items struck through), optional “+N more”, overflow (rename/delete).
 - Empty state: short copy + CTA to create first list.
-- Primary create action: FAB or app-bar action “New list”.
-- Create: dialog or inline prompt for name.
-- Per-list overflow: Rename, Delete (confirm dialog).
-- Tap list → List detail.
+- No matches for search: distinct “No matching lists” empty state.
+- Primary create action: FAB “New list”.
+- Create / rename: dialog for name.
+- Tap card → List detail.
 
 ### 4. List detail
 
 - App bar: back, list title, overflow (rename/delete list).
-- Checklist: each row = checkbox + text; tap checkbox toggles; tap text for edit (inline or dialog).
-- Delete item via swipe affordance or trailing icon with confirm if destructive is preferred; MVP may use trailing delete icon with confirm.
+- Checklist: each row = checkbox + text; tap checkbox toggles; tap text to edit **inline** (Enter/blur save, Escape cancel).
+- Delete item via trailing icon.
 - Sticky/bottom add row: text field + add button.
 - Empty state when no items.
+
+### 5. Settings
+
+- App bar: back, “Settings”.
+- Show signed-in username.
+- Change password form: current, new, confirm; success feedback; inline errors for mismatch / API failures.
+- Route: `/settings` (auth required).
 
 ## MD3 patterns
 
 - Use theme tokens (primary, surface, on-surface); avoid ad-hoc purple glow aesthetics.
-- Prefer `List` / `ListItem` / `Checkbox` / `Dialog` / `Fab` / `AppBar` / `TextField`.
+- Prefer `Card` / `List` / `ListItem` / `Checkbox` / `Dialog` / `Fab` / `AppBar` / `TextField`.
 - Loading: skeleton or circular progress on initial fetch.
 - Errors: snackbar or inline alert; do not lose form input on validation errors.
 
@@ -55,6 +64,7 @@
 | `/register` | Register | Guest |
 | `/` | Lists home | Auth |
 | `/lists/:id` | List detail | Auth |
+| `/settings` | Settings | Auth |
 
 Unauthenticated access to protected routes redirects to `/login`.
 

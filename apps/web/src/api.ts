@@ -48,6 +48,11 @@ export const api = {
       body: JSON.stringify({ username, password }),
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<void>("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
   lists: () => request<{ lists: ListDto[] }>("/api/lists"),
   createList: (name: string) =>
     request<ListDto>("/api/lists", {

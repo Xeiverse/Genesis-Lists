@@ -9,6 +9,7 @@ Verify in Phase 5 (and ongoing CI where automated). Trace IDs to [01-requirement
 - [ ] **REQ-AUTH-02** Login success → session; wrong password → `401`
 - [ ] **REQ-AUTH-03** Logout → subsequent `/api/auth/me` is `401`
 - [ ] **REQ-AUTH-04** `/api/auth/me` returns `{ id, username }`
+- [ ] **REQ-AUTH-05** Change password with correct current → `204`; wrong current → `401`; login with new password works
 
 ## Lists
 

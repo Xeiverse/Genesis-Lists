@@ -111,6 +111,27 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
+  /api/auth/change-password:
+    post:
+      operationId: changePassword
+      summary: Change the current user's password
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password updated
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /api/lists:
     get:
       operationId: listLists
@@ -358,6 +379,19 @@ components:
           minLength: 8
           maxLength: 128
 
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 128
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+
     User:
       type: object
       required: [id, username]
@@ -370,7 +404,7 @@ components:
 
     List:
       type: object
-      required: [id, name, createdAt, updatedAt]
+      required: [id, name, createdAt, updatedAt, previewItems, itemCount]
       properties:
         id:
           type: string
@@ -383,6 +417,23 @@ components:
         updatedAt:
           type: string
           format: date-time
+        previewItems:
+          type: array
+          description: First 8 items by position for homepage card previews
+          items:
+            $ref: '#/components/schemas/ListPreviewItem'
+        itemCount:
+          type: integer
+          minimum: 0
+
+    ListPreviewItem:
+      type: object
+      required: [text, checked]
+      properties:
+        text:
+          type: string
+        checked:
+          type: boolean
 
     CreateListRequest:
       type: object

@@ -102,6 +102,8 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(create.statusCode, 201);
     listId = create.json().id;
+    assert.deepEqual(create.json().previewItems, []);
+    assert.equal(create.json().itemCount, 0);
 
     const list = await app.inject({
       method: "GET",
@@ -111,6 +113,8 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(list.statusCode, 200);
     assert.equal(list.json().lists.length, 1);
     assert.equal(list.json().lists[0].name, "Groceries");
+    assert.deepEqual(list.json().lists[0].previewItems, []);
+    assert.equal(list.json().lists[0].itemCount, 0);
   });
 
   await it("bob cannot see alice lists", async () => {
@@ -143,6 +147,16 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(create.statusCode, 201);
     itemId = create.json().id;
     assert.equal(create.json().checked, false);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(listed.json().lists[0].itemCount, 1);
+    assert.deepEqual(listed.json().lists[0].previewItems, [
+      { text: "Milk", checked: false },
+    ]);
 
     const patch = await app.inject({
       method: "PATCH",
@@ -212,6 +226,39 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json().username, "bob");
+    cookieB = getCookie(res)!;
+  });
+
+  await it("change password", async () => {
+    const bad = await app.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie: cookieB },
+      payload: { currentPassword: "wrongpass", newPassword: "password2" },
+    });
+    assert.equal(bad.statusCode, 401);
+
+    const ok = await app.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie: cookieB },
+      payload: { currentPassword: "password1", newPassword: "password2" },
+    });
+    assert.equal(ok.statusCode, 204);
+
+    const oldLogin = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "bob", password: "password1" },
+    });
+    assert.equal(oldLogin.statusCode, 401);
+
+    const newLogin = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "bob", password: "password2" },
+    });
+    assert.equal(newLogin.statusCode, 200);
   });
 
   await it("bad login", async () => {

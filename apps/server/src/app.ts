@@ -18,15 +18,50 @@ async function buildFastify(config: AppConfig) {
   const db = createDb(config.databasePath);
   const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT_BYTES });
 
+  // Empty bodies with Content-Type: application/json (common from fetch clients) must not 500.
+  app.addContentTypeParser(
+    "application/json",
+    { parseAs: "string" },
+    (_request, body, done) => {
+      const text = typeof body === "string" ? body.trim() : "";
+      if (!text) {
+        done(null, null);
+        return;
+      }
+      try {
+        done(null, JSON.parse(text));
+      } catch {
+        const err = new Error("Invalid JSON body") as Error & {
+          statusCode: number;
+          code: string;
+        };
+        err.statusCode = 400;
+        err.code = "VALIDATION_ERROR";
+        done(err, undefined);
+      }
+    },
+  );
+
   app.setErrorHandler((err, _request, reply) => {
     if (reply.sent) return;
-    const code = (err as { code?: string }).code;
-    const statusCode = (err as { statusCode?: number }).statusCode;
+    const error = err as Error & { statusCode?: number; code?: string };
+    const code = error.code;
+    const statusCode = error.statusCode;
     if (code === "FST_ERR_CTP_BODY_TOO_LARGE" || statusCode === 413) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Request body too large");
     }
-    if (code === "FST_ERR_CTP_EMPTY_JSON_BODY" || (statusCode !== undefined && statusCode >= 400 && statusCode < 500)) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
+    if (
+      code === "FST_ERR_CTP_EMPTY_JSON_BODY" ||
+      (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500)
+    ) {
+      return sendError(
+        reply,
+        typeof statusCode === "number" && statusCode >= 400 && statusCode < 500
+          ? statusCode
+          : 400,
+        "VALIDATION_ERROR",
+        error.message || "Invalid request body",
+      );
     }
     app.log.error?.(err);
     return sendError(reply, 500, "INTERNAL_ERROR", "Internal server error");

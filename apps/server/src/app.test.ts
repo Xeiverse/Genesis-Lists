@@ -196,6 +196,8 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json().name, "Weekly shop");
+    assert.equal(res.json().itemCount, 0);
+    assert.deepEqual(res.json().previewItems, []);
   });
 
   await it("add edit toggle items", async () => {
@@ -216,9 +218,32 @@ describe("Genesis Lists API contract", async () => {
       headers: { cookie: cookieA },
     });
     assert.equal(listed.json().lists[0].itemCount, 1);
-    assert.deepEqual(listed.json().lists[0].previewItems, [
-      { text: "Milk", checked: false },
-    ]);
+    assert.equal(listed.json().lists[0].previewItems.length, 1);
+    assert.equal(listed.json().lists[0].previewItems[0].id, itemId);
+    assert.equal(listed.json().lists[0].previewItems[0].text, "Milk");
+    assert.equal(listed.json().lists[0].previewItems[0].checked, false);
+
+    const listsWithPreview = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(listsWithPreview.statusCode, 200);
+    const previewList = listsWithPreview.json().lists[0];
+    assert.equal(previewList.itemCount, 1);
+    assert.equal(previewList.previewItems.length, 1);
+    assert.equal(previewList.previewItems[0].text, "Milk");
+    assert.equal(previewList.previewItems[0].checked, false);
+
+    const renamed = await app.inject({
+      method: "PATCH",
+      url: `/api/lists/${listId}`,
+      headers: { cookie: cookieA },
+      payload: { name: "Weekly shop" },
+    });
+    assert.equal(renamed.statusCode, 200);
+    assert.equal(renamed.json().itemCount, 1);
+    assert.equal(renamed.json().previewItems[0].text, "Milk");
 
     const patch = await app.inject({
       method: "PATCH",
@@ -270,7 +295,7 @@ describe("Genesis Lists API contract", async () => {
     const del = await app.inject({
       method: "DELETE",
       url: `/api/items/${itemId}`,
-      headers: { cookie: cookieA },
+      headers: { cookie: cookieA, "content-type": "application/json" },
     });
     assert.equal(del.statusCode, 204);
 
@@ -389,5 +414,16 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 401);
     assert.equal(res.json().error.code, "UNAUTHORIZED");
+  });
+
+  await it("malformed JSON body returns 400", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { "content-type": "application/json" },
+      payload: "{not-json",
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, "VALIDATION_ERROR");
   });
 });

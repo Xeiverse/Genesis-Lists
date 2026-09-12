@@ -136,6 +136,7 @@ paths:
     get:
       operationId: listLists
       summary: List lists owned by the current user
+      description: Each list includes itemCount and up to 5 previewItems (by position) for homepage tiles.
       tags: [Lists]
       security:
         - sessionCookie: []
@@ -402,6 +403,18 @@ components:
         username:
           type: string
 
+    ListItemPreview:
+      type: object
+      required: [id, text, checked]
+      properties:
+        id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        checked:
+          type: boolean
+
     List:
       type: object
       required: [id, name, createdAt, updatedAt, previewItems, itemCount]
@@ -419,21 +432,17 @@ components:
           format: date-time
         previewItems:
           type: array
-          description: First 8 items by position for homepage card previews
+          description: >
+            First 8 items by position for homepage card previews.
+            Populated on GET /api/lists and PATCH /api/lists/{id}; empty on create.
           items:
-            $ref: '#/components/schemas/ListPreviewItem'
+            $ref: '#/components/schemas/ListItemPreview'
         itemCount:
           type: integer
           minimum: 0
-
-    ListPreviewItem:
-      type: object
-      required: [text, checked]
-      properties:
-        text:
-          type: string
-        checked:
-          type: boolean
+          description: >
+            Total items in the list; used with previewItems for "+N more".
+            Populated on GET /api/lists and PATCH /api/lists/{id}; 0 on create.
 
     CreateListRequest:
       type: object

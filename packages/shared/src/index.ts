@@ -24,7 +24,8 @@ export type ChangePassword = z.infer<typeof changePasswordSchema>;
 
 export const PREVIEW_ITEM_LIMIT = 8;
 
-export type ListPreviewItemDto = {
+export type ListItemPreviewDto = {
+  id: string;
   text: string;
   checked: boolean;
 };
@@ -61,7 +62,7 @@ export type ListDto = {
   name: string;
   createdAt: string;
   updatedAt: string;
-  previewItems: ListPreviewItemDto[];
+  previewItems: ListItemPreviewDto[];
   itemCount: number;
 };
 

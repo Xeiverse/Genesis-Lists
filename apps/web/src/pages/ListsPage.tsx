@@ -226,9 +226,9 @@ export function ListsPage() {
                         </Typography>
                       ) : (
                         <Stack spacing={0.25}>
-                          {list.previewItems.map((item, idx) => (
+                          {list.previewItems.map((item) => (
                             <Typography
-                              key={`${list.id}-preview-${idx}`}
+                              key={item.id}
                               variant="body2"
                               sx={{
                                 textDecoration: item.checked ? "line-through" : "none",

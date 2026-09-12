@@ -7,14 +7,14 @@ import {
   updateListSchema,
   type ListDto,
   type ListItemDto,
-  type ListPreviewItemDto,
+  type ListItemPreviewDto,
 } from "@genesis-lists/shared";
 import type { Db, ItemRow, ListRow } from "../db/index.js";
 import { nowIso, requireUser, sendError, uuid } from "../util.js";
 
 function toListDto(
   row: ListRow,
-  previewItems: ListPreviewItemDto[] = [],
+  previewItems: ListItemPreviewDto[] = [],
   itemCount = 0,
 ): ListDto {
   return {
@@ -30,10 +30,10 @@ function toListDto(
 function loadListPreviews(
   db: Db,
   listIds: string[],
-): Map<string, { previewItems: ListPreviewItemDto[]; itemCount: number }> {
+): Map<string, { previewItems: ListItemPreviewDto[]; itemCount: number }> {
   const result = new Map<
     string,
-    { previewItems: ListPreviewItemDto[]; itemCount: number }
+    { previewItems: ListItemPreviewDto[]; itemCount: number }
   >();
   for (const id of listIds) {
     result.set(id, { previewItems: [], itemCount: 0 });
@@ -43,12 +43,13 @@ function loadListPreviews(
   const placeholders = listIds.map(() => "?").join(", ");
   const rows = db
     .prepare(
-      `SELECT list_id, text, checked, position
+      `SELECT id, list_id, text, checked, position
        FROM list_items
        WHERE list_id IN (${placeholders})
        ORDER BY list_id ASC, position ASC`,
     )
     .all(...listIds) as Array<{
+    id: string;
     list_id: string;
     text: string;
     checked: number;
@@ -61,6 +62,7 @@ function loadListPreviews(
     entry.itemCount += 1;
     if (entry.previewItems.length < PREVIEW_ITEM_LIMIT) {
       entry.previewItems.push({
+        id: row.id,
         text: row.text,
         checked: row.checked === 1,
       });

@@ -84,7 +84,10 @@ export async function registerAuth(
   app.post("/api/auth/register", async (request, reply) => {
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
+      const detail = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+        .join("; ");
+      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
     }
 
     const { username, password } = parsed.data;
@@ -113,7 +116,10 @@ export async function registerAuth(
   app.post("/api/auth/login", async (request, reply) => {
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
+      const detail = parsed.error.issues
+        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+        .join("; ");
+      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
     }
 
     const { username, password } = parsed.data;

@@ -42,7 +42,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` + `itemCount`) |
+| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` up to 8 and `itemCount`) |
 | POST | `/api/lists` | Yes | Create list `{ "name": "..." }` |
 | PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` |
 | DELETE | `/api/lists/{id}` | Yes | Delete list + items |

@@ -8,9 +8,9 @@ All endpoints are under `/api`.
 
 ## Authentication
 
-- **Mechanism:** HTTP-only session cookie (`genesis_session` unless configured otherwise).
+- **Mechanism:** HTTP-only session cookie (`genesis_session` unless configured otherwise). The cookie is **signed** with `SESSION_SECRET`, `SameSite=Lax`, and `Secure` when `COOKIE_SECURE=true` (or production default). The cookie value is a random session id stored in SQLite.
 - **Register / login** set the cookie on success.
-- **Logout** clears the cookie.
+- **Logout** clears the cookie and deletes the server-side session.
 - Protected routes require a valid session; otherwise `401` with error code `UNAUTHORIZED`.
 
 ## Error shape

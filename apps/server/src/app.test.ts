@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
+import { BODY_LIMIT_BYTES } from "./util.js";
 
 function getCookie(res: { headers: Record<string, unknown> }) {
   const raw = res.headers["set-cookie"];
@@ -49,6 +50,45 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), { status: "ok" });
   });
 
+  await it("unauthenticated protected routes are 401", async () => {
+    const me = await app.inject({ method: "GET", url: "/api/auth/me" });
+    assert.equal(me.statusCode, 401);
+    assert.equal(me.json().error.code, "UNAUTHORIZED");
+
+    const lists = await app.inject({ method: "GET", url: "/api/lists" });
+    assert.equal(lists.statusCode, 401);
+    assert.equal(lists.json().error.code, "UNAUTHORIZED");
+  });
+
+  await it("invalid bodies are 400 VALIDATION_ERROR", async () => {
+    const register = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "ab", password: "short" },
+    });
+    assert.equal(register.statusCode, 400);
+    assert.equal(register.json().error.code, "VALIDATION_ERROR");
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "alice", password: "short" },
+    });
+    assert.equal(login.statusCode, 400);
+    assert.equal(login.json().error.code, "VALIDATION_ERROR");
+  });
+
+  await it("oversize body is 400 VALIDATION_ERROR", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      headers: { "content-type": "application/json" },
+      payload: { username: "alice", password: "x".repeat(BODY_LIMIT_BYTES) },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, "VALIDATION_ERROR");
+  });
+
   await it("register alice", async () => {
     const res = await app.inject({
       method: "POST",
@@ -61,6 +101,27 @@ describe("Genesis Lists API contract", async () => {
     assert.ok(body.id);
     cookieA = getCookie(res)!;
     assert.ok(cookieA.includes("genesis_session="));
+    // Signed cookies are value.signature
+    assert.match(cookieA, /^genesis_session=.+\./);
+  });
+
+  await it("create list without auth is 401; invalid name is 400", async () => {
+    const unauth = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      payload: { name: "Groceries" },
+    });
+    assert.equal(unauth.statusCode, 401);
+    assert.equal(unauth.json().error.code, "UNAUTHORIZED");
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+      payload: { name: "   " },
+    });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(invalid.json().error.code, "VALIDATION_ERROR");
   });
 
   await it("duplicate username conflicts", async () => {
@@ -137,7 +198,7 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(res.json().name, "Weekly shop");
   });
 
-  await it("add edit toggle delete items", async () => {
+  await it("add edit toggle items", async () => {
     const create = await app.inject({
       method: "POST",
       url: `/api/lists/${listId}/items`,
@@ -147,6 +208,7 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(create.statusCode, 201);
     itemId = create.json().id;
     assert.equal(create.json().checked, false);
+    assert.equal(create.json().position, 0);
 
     const listed = await app.inject({
       method: "GET",
@@ -174,32 +236,90 @@ describe("Genesis Lists API contract", async () => {
       headers: { cookie: cookieA },
     });
     assert.equal(items.json().items.length, 1);
+    assert.equal(items.json().items[0].text, "Oat milk");
+  });
 
+  await it("bob gets 404 on alice list and items", async () => {
+    const getItems = await app.inject({
+      method: "GET",
+      url: `/api/lists/${listId}/items`,
+      headers: { cookie: cookieB },
+    });
+    assert.equal(getItems.statusCode, 404);
+    assert.equal(getItems.json().error.code, "NOT_FOUND");
+
+    const patchItem = await app.inject({
+      method: "PATCH",
+      url: `/api/items/${itemId}`,
+      headers: { cookie: cookieB },
+      payload: { text: "Stolen" },
+    });
+    assert.equal(patchItem.statusCode, 404);
+    assert.equal(patchItem.json().error.code, "NOT_FOUND");
+
+    const deleteItem = await app.inject({
+      method: "DELETE",
+      url: `/api/items/${itemId}`,
+      headers: { cookie: cookieB },
+    });
+    assert.equal(deleteItem.statusCode, 404);
+    assert.equal(deleteItem.json().error.code, "NOT_FOUND");
+  });
+
+  await it("delete item", async () => {
     const del = await app.inject({
       method: "DELETE",
       url: `/api/items/${itemId}`,
       headers: { cookie: cookieA },
     });
     assert.equal(del.statusCode, 204);
-  });
 
-  await it("bob gets 404 on alice list", async () => {
-    const res = await app.inject({
+    const items = await app.inject({
       method: "GET",
       url: `/api/lists/${listId}/items`,
-      headers: { cookie: cookieB },
+      headers: { cookie: cookieA },
     });
-    assert.equal(res.statusCode, 404);
-    assert.equal(res.json().error.code, "NOT_FOUND");
+    assert.equal(items.json().items.length, 0);
+
+    const create = await app.inject({
+      method: "POST",
+      url: `/api/lists/${listId}/items`,
+      headers: { cookie: cookieA },
+      payload: { text: "Eggs" },
+    });
+    assert.equal(create.statusCode, 201);
+    itemId = create.json().id;
   });
 
-  await it("delete list", async () => {
+  await it("delete list cascades items", async () => {
     const res = await app.inject({
       method: "DELETE",
       url: `/api/lists/${listId}`,
       headers: { cookie: cookieA },
     });
     assert.equal(res.statusCode, 204);
+
+    const lists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(lists.json().lists.length, 0);
+
+    const items = await app.inject({
+      method: "GET",
+      url: `/api/lists/${listId}/items`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(items.statusCode, 404);
+
+    const leftoverItem = await app.inject({
+      method: "PATCH",
+      url: `/api/items/${itemId}`,
+      headers: { cookie: cookieA },
+      payload: { checked: false },
+    });
+    assert.equal(leftoverItem.statusCode, 404);
   });
 
   await it("logout", async () => {

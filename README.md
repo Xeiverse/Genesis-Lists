@@ -2,11 +2,14 @@
 
 Open-source, self-hostable list app (shopping lists first). Built with Spec-Driven Development: specifications in [`docs/`](docs/) are the source of truth.
 
+**MVP status:** accepted against the current specs ([acceptance checklist](docs/acceptance/mvp-checklist.md)). Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md).
+
 ## Features (MVP)
 
-- Multiple lists per user
+- Multiple lists per user, with Keep-style preview cards and search
 - Add / edit / toggle / delete checklist items
 - Multi-user accounts with isolated data
+- Change password from Settings
 - Material Design 3 responsive web UI
 - Docker self-hosting with SQLite
 
@@ -56,7 +59,7 @@ set SESSION_SECRET=replace-with-long-random-value   # Windows
 docker compose up -d --build
 ```
 
-Open http://localhost:3000. Put a reverse proxy with HTTPS in front for production (`COOKIE_SECURE=true`).
+Open http://localhost:3000. Compose defaults `COOKIE_SECURE=false` for local HTTP and may use a placeholder `SESSION_SECRET` (warning in logs). For production, put a reverse proxy with HTTPS in front and set `COOKIE_SECURE=true` plus a strong `SESSION_SECRET`.
 
 See [Self-hosting](docs/06-self-hosting.md) for env vars, volumes, and backup.
 

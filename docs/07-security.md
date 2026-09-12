@@ -4,13 +4,13 @@
 
 - Local **username + password** accounts.
 - Passwords hashed with **argon2id** before storage; plaintext never logged or returned.
-- Sessions established on register/login via **HTTP-only** cookie (not accessible to JS).
-- `Secure` flag on when HTTPS / production; `SameSite=Lax`.
-- Logout invalidates the server-side session (or clears signed cookie material per ADR 0002).
+- Sessions established on register/login via an **HTTP-only**, **signed** cookie (not accessible to JS). The cookie payload is a random session id; the server looks it up in the `sessions` table.
+- Cookie is signed with `SESSION_SECRET`. `Secure` flag on when HTTPS / `COOKIE_SECURE=true`; `SameSite=Lax`.
+- Logout deletes the server-side session row and clears the cookie.
 
 ## Password & username policy
 
-See [01-requirements.md](01-requirements.md). Reject oversize bodies; enforce max lengths at validation layer.
+See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB are rejected (`400 VALIDATION_ERROR`). Max lengths are enforced at the validation layer (Zod).
 
 ## Authorization
 
@@ -23,11 +23,12 @@ See [01-requirements.md](01-requirements.md). Reject oversize bodies; enforce ma
 | Threat | Mitigation |
 |--------|------------|
 | Password theft at rest | argon2id |
-| XSS stealing session | HTTP-only cookie; sanitize/avoid `dangerouslySetInnerHTML` |
+| XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
-| Brute force | Soft limit: no distributed rate limit in MVP; document reverse-proxy rate limiting for operators |
-| Path traversal / SQLi | Parameterized queries via ORM |
-| Secret leakage | `SESSION_SECRET` via env; never commit secrets |
+| Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
+| Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
+| Secret leakage | `SESSION_SECRET` via env; never commit secrets; refuse known placeholders when `COOKIE_SECURE=true` |
+| Oversize payloads | 16 KiB JSON body limit |
 
 ## Out of scope for MVP security features
 

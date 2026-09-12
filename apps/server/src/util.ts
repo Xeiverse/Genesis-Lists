@@ -13,6 +13,37 @@ export function sendError(
 
 export const SESSION_COOKIE = "genesis_session";
 export const SESSION_DAYS = 30;
+export const BODY_LIMIT_BYTES = 16 * 1024;
+export const DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me";
+
+const WEAK_SESSION_SECRETS = new Set([
+  DEV_SESSION_SECRET,
+  "change-me",
+  "change-me-to-a-long-random-string",
+]);
+
+export function resolveSessionSecret(opts: {
+  sessionSecret: string | undefined;
+  cookieSecure: boolean;
+}): string {
+  const trimmed = opts.sessionSecret?.trim();
+  const secret = trimmed || DEV_SESSION_SECRET;
+  const weak = !trimmed || WEAK_SESSION_SECRETS.has(secret);
+
+  if (opts.cookieSecure && weak) {
+    throw new Error(
+      "SESSION_SECRET is required when COOKIE_SECURE=true. Set a long random secret; do not use a placeholder.",
+    );
+  }
+
+  if (weak) {
+    console.warn(
+      "Warning: using a weak or default SESSION_SECRET. Set a strong secret before exposing this instance.",
+    );
+  }
+
+  return secret;
+}
 
 export type AuthUser = { id: string; username: string };
 

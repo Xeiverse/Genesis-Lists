@@ -235,7 +235,7 @@ export function ListDetailPage() {
                 }
                 void commitTitleEdit();
               }}
-              aria-label="List name"
+              inputProps={{ "aria-label": "List name" }}
               variant="standard"
               sx={{
                 flexGrow: 1,
@@ -299,7 +299,9 @@ export function ListDetailPage() {
                       edge="start"
                       checked={item.checked}
                       onChange={() => void toggle(item)}
-                      inputProps={{ "aria-label": `toggle ${item.text}` }}
+                      inputProps={{
+                        "aria-labelledby": `item-text-${item.id}`,
+                      }}
                     />
                   </ListItemIcon>
                   <TextField
@@ -330,6 +332,7 @@ export function ListDetailPage() {
                       disableUnderline: !isEditing,
                     }}
                     inputProps={{
+                      id: `item-text-${item.id}`,
                       "aria-label": isEditing ? `Edit ${item.text}` : item.text,
                     }}
                     sx={{

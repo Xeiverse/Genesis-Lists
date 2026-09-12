@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import argon2 from "argon2";
 import {
@@ -32,8 +32,16 @@ export async function registerAuth(
 
   app.decorateRequest("user", undefined);
 
+  function readSessionId(request: FastifyRequest) {
+    const raw = request.cookies[SESSION_COOKIE];
+    if (!raw) return undefined;
+    const unsigned = request.unsignCookie(raw);
+    if (!unsigned.valid || !unsigned.value) return undefined;
+    return unsigned.value;
+  }
+
   app.addHook("preHandler", async (request) => {
-    const sessionId = request.cookies[SESSION_COOKIE];
+    const sessionId = readSessionId(request);
     if (!sessionId) return;
 
     const row = db
@@ -56,12 +64,13 @@ export async function registerAuth(
       httpOnly: true,
       sameSite: "lax",
       secure: opts.cookieSecure,
+      signed: true,
       maxAge: SESSION_DAYS * 24 * 60 * 60,
     });
   }
 
   function clearSessionCookie(reply: FastifyReply) {
-    reply.clearCookie(SESSION_COOKIE, { path: "/" });
+    reply.clearCookie(SESSION_COOKIE, { path: "/", signed: true });
   }
 
   function createSession(userId: string) {
@@ -131,7 +140,7 @@ export async function registerAuth(
     if (!request.user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
-    const sessionId = request.cookies[SESSION_COOKIE];
+    const sessionId = readSessionId(request);
     if (sessionId) {
       db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
     }

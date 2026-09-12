@@ -139,7 +139,7 @@ export function ListsPage() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="md" sx={{ py: 2, pb: 10 }}>
+      <Container maxWidth={false} sx={{ py: 2, pb: 10, maxWidth: 960 }}>
         <TextField
           fullWidth
           size="small"
@@ -258,15 +258,17 @@ export function ListsPage() {
       </Container>
 
       <Fab
+        variant="extended"
         color="primary"
-        aria-label="create list"
+        aria-label="New list"
         sx={{ position: "fixed", bottom: 24, right: 24 }}
         onClick={() => {
           setNameInput("");
           setCreateOpen(true);
         }}
       >
-        <AddIcon />
+        <AddIcon sx={{ mr: 1 }} />
+        New list
       </Fab>
 
       <Menu

@@ -8,8 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node --experimental-sqlite dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-sqlite --import tsx --test src/app.test.ts",
-    "test:watch": "node --experimental-sqlite --import tsx --test --watch src/app.test.ts"
+    "test": "node --experimental-sqlite --import tsx --test src/*.test.ts",
+    "test:watch": "node --experimental-sqlite --import tsx --test --watch src/*.test.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.1",

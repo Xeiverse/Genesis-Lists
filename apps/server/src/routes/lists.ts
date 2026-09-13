@@ -41,14 +41,32 @@ function loadListPreviews(
   if (listIds.length === 0) return result;
 
   const placeholders = listIds.map(() => "?").join(", ");
-  const rows = db
+
+  const countRows = db
+    .prepare(
+      `SELECT list_id, COUNT(*) AS cnt FROM list_items
+       WHERE list_id IN (${placeholders})
+       GROUP BY list_id`,
+    )
+    .all(...listIds) as Array<{ list_id: string; cnt: number }>;
+  for (const row of countRows) {
+    const entry = result.get(row.list_id);
+    if (entry) entry.itemCount = row.cnt;
+  }
+
+  const previewRows = db
     .prepare(
       `SELECT id, list_id, text, checked, position
-       FROM list_items
-       WHERE list_id IN (${placeholders})
+       FROM (
+         SELECT id, list_id, text, checked, position,
+           ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY position ASC) AS rn
+         FROM list_items
+         WHERE list_id IN (${placeholders})
+       )
+       WHERE rn <= ?
        ORDER BY list_id ASC, position ASC`,
     )
-    .all(...listIds) as Array<{
+    .all(...listIds, PREVIEW_ITEM_LIMIT) as Array<{
     id: string;
     list_id: string;
     text: string;
@@ -56,17 +74,14 @@ function loadListPreviews(
     position: number;
   }>;
 
-  for (const row of rows) {
+  for (const row of previewRows) {
     const entry = result.get(row.list_id);
     if (!entry) continue;
-    entry.itemCount += 1;
-    if (entry.previewItems.length < PREVIEW_ITEM_LIMIT) {
-      entry.previewItems.push({
-        id: row.id,
-        text: row.text,
-        checked: row.checked === 1,
-      });
-    }
+    entry.previewItems.push({
+      id: row.id,
+      text: row.text,
+      checked: row.checked === 1,
+    });
   }
 
   return result;

@@ -136,7 +136,7 @@ paths:
     get:
       operationId: listLists
       summary: List lists owned by the current user
-      description: Each list includes itemCount and up to 5 previewItems (by position) for homepage tiles.
+      description: Each list includes itemCount and up to 8 previewItems (by position) for homepage cards.
       tags: [Lists]
       security:
         - sessionCookie: []

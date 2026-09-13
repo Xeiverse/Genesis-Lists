@@ -8,6 +8,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 - Multiple lists per user, with Keep-style preview cards and search
 - Add / edit / toggle / delete checklist items
+- Ticked items collect in a collapsible section with clear-all
 - Multi-user accounts with isolated data
 - Change password from Settings
 - Material Design 3 responsive web UI

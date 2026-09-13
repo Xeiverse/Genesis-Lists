@@ -1,6 +1,10 @@
 # Genesis Lists
 
+![Genesis Lists icon](apps/web/public/favicon.svg)
+
 Open-source, self-hostable list app (shopping lists first). Built with Spec-Driven Development: specifications in [`docs/`](docs/) are the source of truth.
+
+The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
 **MVP status:** accepted against the current specs ([acceptance checklist](docs/acceptance/mvp-checklist.md)). Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md).
 

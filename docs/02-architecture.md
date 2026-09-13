@@ -20,7 +20,7 @@ flowchart TB
 | **Web (React + Vite + MUI)** | Auth screens, lists home, list detail; Material Design 3 |
 | **API (Fastify)** | REST under `/api`; session auth; ownership checks |
 | **SQLite** | Persistent storage on a mounted volume |
-| **Static hosting** | Production server serves built SPA assets and API together |
+| **Static hosting** | Production server serves built SPA assets (including the application icon and web manifest) and API together |
 
 ## Trust boundaries
 

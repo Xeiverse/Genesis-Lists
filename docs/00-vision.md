@@ -2,7 +2,7 @@
 
 ## What is Genesis Lists?
 
-Genesis Lists is an open-source, self-hostable application for creating and managing simple lists. The initial focus is **shopping lists**, with a calm Material Design 3 interface that works on phones and desktops in the browser.
+Genesis Lists is an open-source, self-hostable application for creating and managing simple lists. The initial focus is **shopping lists**, with a calm Material Design 3 interface that works on phones and desktops in the browser. The product mark is the Material Symbols Receipt Long icon.
 
 It is inspired by tools like Google Keep, but owned and operated by the people who run it—no cloud vendor lock-in for personal data.
 

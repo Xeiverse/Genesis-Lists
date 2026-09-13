@@ -32,6 +32,7 @@ Requirement IDs (`REQ-*`) map to [acceptance/mvp-checklist.md](acceptance/mvp-ch
 | REQ-ITEM-03 | As a user, I can toggle an item checked/unchecked | `checked` flips and persists (shopping “got it” behavior) |
 | REQ-ITEM-04 | As a user, I can delete an item | Item is removed from the list |
 | REQ-ITEM-05 | As a user, I cannot mutate another user’s items | Access to foreign list/item returns 404 (no existence leak) |
+| REQ-ITEM-06 | As a user, ticked items collect in a collapsible section, and I can clear them | Ticking an item moves it into a bottom ticked section that can be collapsed; unticking restores it among open items by `position` (positions are not rewritten). A confirmed clear deletes only ticked items on a list I own. Clearing another user’s list, or a missing list, returns 404 (no existence leak). Clear is idempotent when nothing is ticked (`204`) |
 
 ### Client & ops
 

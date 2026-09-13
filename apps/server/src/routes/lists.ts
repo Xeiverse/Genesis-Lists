@@ -269,6 +269,23 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     );
   });
 
+  app.delete("/api/lists/:id/items/checked", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const list = db
+      .prepare(`SELECT id FROM lists WHERE id = ? AND owner_id = ?`)
+      .get(id, user.id);
+
+    if (!list) {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+
+    db.prepare(`DELETE FROM list_items WHERE list_id = ? AND checked = 1`).run(id);
+    return reply.status(204).send();
+  });
+
   app.patch("/api/items/:id", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;

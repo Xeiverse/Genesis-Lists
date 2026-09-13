@@ -12,8 +12,9 @@ import {
   Typography,
 } from "@mui/material";
 import { passwordSchema, usernameSchema } from "@genesis-lists/shared";
-import { useAuth } from "../auth";
 import { ApiError } from "../api";
+import { AppMark } from "../AppMark";
+import { useAuth } from "../auth";
 
 function usernameErrorMessage(value: string): string | null {
   const result = usernameSchema.safeParse(value);
@@ -71,6 +72,12 @@ export function RegisterPage() {
     <Container maxWidth="xs" sx={{ py: 8 }}>
       <Paper elevation={0} sx={{ p: 3, bgcolor: "background.paper", border: 1, borderColor: "divider" }}>
         <Stack spacing={2} component="form" onSubmit={onSubmit} noValidate>
+          <Stack spacing={1} sx={{ alignItems: "center" }}>
+            <AppMark size={56} />
+            <Typography variant="subtitle1" component="p">
+              Genesis Lists
+            </Typography>
+          </Stack>
           <Typography variant="h5" component="h1">
             Create account
           </Typography>

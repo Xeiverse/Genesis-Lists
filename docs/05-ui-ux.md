@@ -6,10 +6,29 @@
 - Material Design 3 via MUI: tonal surfaces, rounded controls, clear hierarchy.
 - Mobile-first; usable at ~360px width; comfortable on desktop with a max content width (~960px for home masonry).
 
+## Application icon
+
+The product mark is Material Symbols **Receipt Long** (`receipt_long`): the published glyph (not a redraw) in white on the primary green tile (`#386a20`), with about 22% corner radius and padding so the glyph stays in the maskable safe zone. The glyph is Apache License 2.0 ([Material Symbols](https://github.com/google/material-design-icons)).
+
+Assets live in `apps/web/public/` and are copied into the SPA build:
+
+| File | Role |
+|------|------|
+| `favicon.svg` | Source mark; SVG favicon |
+| `favicon.ico` | 16×16 and 32×32 fallback |
+| `apple-touch-icon.png` | 180×180 bookmark icon |
+| `icon-192.png`, `icon-512.png` | Web manifest icons |
+| `site.webmanifest` | Name, icons, theme color `#386a20`, background `#f7fbf1` |
+
+Home-screen PNGs are the same mark composited onto a full-bleed `#386a20` tile so platform masks do not reveal transparent corners. `index.html` also sets `theme-color` to `#386a20`. The manifest is only for the icon and colors: there is no service worker, and installability stays on the [roadmap](08-roadmap.md).
+
+In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only where the product is introduced. On the primary app bar the tile is inverted (light tile, green glyph) so it stays visible.
+
 ## Screens
 
 ### 1. Login
 
+- Product mark and “Genesis Lists” above the heading.
 - Centered card/form: username, password, submit.
 - Link to Register.
 - Inline error for auth failure.
@@ -17,6 +36,7 @@
 
 ### 2. Register
 
+- Product mark and “Genesis Lists” above the heading.
 - Username, password, submit.
 - Link to Login.
 - Validation messages for username/password rules ([01-requirements.md](01-requirements.md)).
@@ -24,7 +44,7 @@
 
 ### 3. Lists home
 
-- Top app bar: product name “Genesis Lists”, circular avatar with username initial opening a menu (Settings, Log out).
+- Top app bar: inverted product mark, product name “Genesis Lists”, circular avatar with username initial opening a menu (Settings, Log out). List detail and Settings do not repeat the mark.
 - Search field below the app bar: filters lists by name or preview item text (client-side).
 - Body: Keep-style multi-column masonry of list cards (1 / 2 / 3 columns by breakpoint). Card heights vary with preview content; cards do not stretch to match neighbors in a row.
 - Each card: list name, up to 8 preview item lines (checked items struck through), optional “+N more”, overflow (rename/delete).

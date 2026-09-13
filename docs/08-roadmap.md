@@ -18,7 +18,7 @@ Specs first for each item—extend docs and OpenAPI before implementation.
 
 ## PWA
 
-- Installability + offline read cache after CRUD UX is solid.
+- Application icon and a minimal web manifest already exist ([UI/UX](05-ui-ux.md)). Remaining work is installability and an offline read cache.
 - Conflict strategy before offline writes.
 
 ## Native clients

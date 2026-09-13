@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AppBar,
@@ -6,6 +6,7 @@ import {
   Button,
   Checkbox,
   CircularProgress,
+  Collapse,
   Container,
   Dialog,
   DialogActions,
@@ -27,9 +28,105 @@ import {
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import type { ListItemDto } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
+
+function byPosition(a: ListItemDto, b: ListItemDto) {
+  return a.position - b.position;
+}
+
+function ItemRow({
+  item,
+  isEditing,
+  editText,
+  editInputRef,
+  onToggle,
+  onStartEdit,
+  onEditText,
+  onEditKeyDown,
+  onEditBlur,
+  onDelete,
+}: {
+  item: ListItemDto;
+  isEditing: boolean;
+  editText: string;
+  editInputRef: RefObject<HTMLInputElement | null>;
+  onToggle: (item: ListItemDto) => void;
+  onStartEdit: (item: ListItemDto) => void;
+  onEditText: (text: string) => void;
+  onEditKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onEditBlur: () => void;
+  onDelete: (item: ListItemDto) => void;
+}) {
+  return (
+    <ListItem disablePadding sx={{ pr: 6, alignItems: "center", minHeight: 48 }}>
+      <ListItemIcon sx={{ minWidth: 42 }}>
+        <Checkbox
+          edge="start"
+          checked={item.checked}
+          onChange={() => onToggle(item)}
+          inputProps={{
+            "aria-label": `toggle ${item.text}`,
+          }}
+        />
+      </ListItemIcon>
+      <TextField
+        inputRef={isEditing ? editInputRef : undefined}
+        variant="standard"
+        fullWidth
+        value={isEditing ? editText : item.text}
+        onChange={(e) => {
+          if (isEditing) onEditText(e.target.value);
+        }}
+        onClick={() => {
+          if (!isEditing) onStartEdit(item);
+        }}
+        onFocus={() => {
+          if (!isEditing) onStartEdit(item);
+        }}
+        onKeyDown={isEditing ? onEditKeyDown : undefined}
+        onBlur={() => {
+          if (!isEditing) return;
+          onEditBlur();
+        }}
+        InputProps={{
+          readOnly: !isEditing,
+          disableUnderline: !isEditing,
+        }}
+        inputProps={{
+          id: `item-text-${item.id}`,
+          "aria-label": isEditing ? `Edit ${item.text}` : item.text,
+        }}
+        sx={{
+          mr: 1,
+          minHeight: 40,
+          justifyContent: "center",
+          "& .MuiInputBase-root": {
+            minHeight: 40,
+          },
+          "& .MuiInputBase-input": {
+            cursor: isEditing ? "text" : "pointer",
+            py: 1,
+            textDecoration: item.checked && !isEditing ? "line-through" : "none",
+            opacity: item.checked && !isEditing ? 0.6 : 1,
+          },
+        }}
+      />
+      <ListItemSecondaryAction>
+        <IconButton
+          edge="end"
+          aria-label={`delete ${item.text}`}
+          onClick={() => onDelete(item)}
+        >
+          <DeleteOutlineIcon />
+        </IconButton>
+      </ListItemSecondaryAction>
+    </ListItem>
+  );
+}
 
 export function ListDetailPage() {
   const { id = "" } = useParams();
@@ -45,6 +142,8 @@ export function ListDetailPage() {
   const [editText, setEditText] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [tickedOpen, setTickedOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
   const editInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const skipBlurSave = useRef(false);
@@ -70,6 +169,7 @@ export function ListDetailPage() {
   }, [id, navigate]);
 
   useEffect(() => {
+    setTickedOpen(false);
     void refresh();
   }, [refresh]);
 
@@ -151,6 +251,14 @@ export function ListDetailPage() {
     }
   }
 
+  function onEditBlur() {
+    if (skipBlurSave.current) {
+      skipBlurSave.current = false;
+      return;
+    }
+    void commitEdit();
+  }
+
   function startTitleEdit() {
     skipTitleBlurSave.current = false;
     setTitleDraft(title);
@@ -204,6 +312,20 @@ export function ListDetailPage() {
     }
   }
 
+  async function handleClearChecked() {
+    try {
+      await api.clearCheckedItems(id);
+      setItems((prev) => prev.filter((item) => !item.checked));
+      setClearOpen(false);
+      if (editingId && items.find((item) => item.id === editingId)?.checked) {
+        setEditingId(null);
+        setEditText("");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Clear failed");
+    }
+  }
+
   async function handleDeleteList() {
     try {
       await api.deleteList(id);
@@ -211,6 +333,27 @@ export function ListDetailPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
     }
+  }
+
+  const openItems = items.filter((item) => !item.checked).sort(byPosition);
+  const tickedItems = items.filter((item) => item.checked).sort(byPosition);
+
+  function renderItem(item: ListItemDto) {
+    return (
+      <ItemRow
+        key={item.id}
+        item={item}
+        isEditing={editingId === item.id}
+        editText={editText}
+        editInputRef={editInputRef}
+        onToggle={(row) => void toggle(row)}
+        onStartEdit={startEdit}
+        onEditText={setEditText}
+        onEditKeyDown={onEditKeyDown}
+        onEditBlur={onEditBlur}
+        onDelete={(row) => void removeItem(row)}
+      />
+    );
   }
 
   return (
@@ -289,80 +432,43 @@ export function ListDetailPage() {
             No items yet. Add something below.
           </Typography>
         ) : (
-          <List>
-            {items.map((item) => {
-              const isEditing = editingId === item.id;
-              return (
-                <ListItem key={item.id} disablePadding sx={{ pr: 6, alignItems: "center", minHeight: 48 }}>
-                  <ListItemIcon sx={{ minWidth: 42 }}>
-                    <Checkbox
-                      edge="start"
-                      checked={item.checked}
-                      onChange={() => void toggle(item)}
-                      inputProps={{
-                        "aria-label": `toggle ${item.text}`,
-                      }}
-                    />
-                  </ListItemIcon>
-                  <TextField
-                    inputRef={isEditing ? editInputRef : undefined}
-                    variant="standard"
-                    fullWidth
-                    value={isEditing ? editText : item.text}
-                    onChange={(e) => {
-                      if (isEditing) setEditText(e.target.value);
-                    }}
-                    onClick={() => {
-                      if (!isEditing) startEdit(item);
-                    }}
-                    onFocus={() => {
-                      if (!isEditing) startEdit(item);
-                    }}
-                    onKeyDown={isEditing ? onEditKeyDown : undefined}
-                    onBlur={() => {
-                      if (!isEditing) return;
-                      if (skipBlurSave.current) {
-                        skipBlurSave.current = false;
-                        return;
-                      }
-                      void commitEdit();
-                    }}
-                    InputProps={{
-                      readOnly: !isEditing,
-                      disableUnderline: !isEditing,
-                    }}
-                    inputProps={{
-                      id: `item-text-${item.id}`,
-                      "aria-label": isEditing ? `Edit ${item.text}` : item.text,
-                    }}
+          <>
+            {openItems.length > 0 && <List>{openItems.map(renderItem)}</List>}
+            {tickedItems.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Stack direction="row" alignItems="center">
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    onClick={() => setTickedOpen((open) => !open)}
+                    aria-expanded={tickedOpen}
+                    aria-controls="ticked-items"
+                    startIcon={tickedOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                     sx={{
-                      mr: 1,
-                      minHeight: 40,
-                      justifyContent: "center",
-                      "& .MuiInputBase-root": {
-                        minHeight: 40,
-                      },
-                      "& .MuiInputBase-input": {
-                        cursor: isEditing ? "text" : "pointer",
-                        py: 1,
-                        textDecoration: item.checked && !isEditing ? "line-through" : "none",
-                        opacity: item.checked && !isEditing ? 0.6 : 1,
-                      },
+                      flexGrow: 1,
+                      justifyContent: "flex-start",
+                      color: "text.secondary",
+                      textTransform: "none",
                     }}
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton
-                      edge="end"
-                      aria-label={`delete ${item.text}`}
-                      onClick={() => void removeItem(item)}
-                    >
-                      <DeleteOutlineIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              );
-            })}
-          </List>
+                  >
+                    {tickedItems.length} ticked
+                  </Button>
+                  <Button
+                    variant="text"
+                    color="inherit"
+                    aria-label="Clear ticked items"
+                    onClick={() => setClearOpen(true)}
+                    sx={{ color: "text.secondary", textTransform: "none" }}
+                  >
+                    Clear
+                  </Button>
+                </Stack>
+                <Collapse in={tickedOpen} id="ticked-items">
+                  <List>{tickedItems.map(renderItem)}</List>
+                </Collapse>
+              </Box>
+            )}
+          </>
         )}
       </Container>
 
@@ -411,6 +517,25 @@ export function ListDetailPage() {
           Delete list
         </MenuItem>
       </Menu>
+
+      <Dialog open={clearOpen} onClose={() => setClearOpen(false)}>
+        <DialogTitle>Clear ticked items?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            {tickedItems.length === 1
+              ? "1 ticked item will be permanently deleted. Unticked items stay."
+              : `${tickedItems.length} ticked items will be permanently deleted. Unticked items stay.`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={() => setClearOpen(false)}>
+            Cancel
+          </Button>
+          <Button color="error" onClick={() => void handleClearChecked()}>
+            Clear
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete list?</DialogTitle>

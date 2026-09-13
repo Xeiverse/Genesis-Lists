@@ -37,10 +37,12 @@
 ### 4. List detail
 
 - App bar: back, list title (tap to **inline** rename; Enter/blur save, Escape cancel), overflow (rename starts inline edit; delete list).
-- Checklist: each row = checkbox + text field; tap checkbox toggles; tap/focus text to edit **inline** without layout shift (Enter/blur save, Escape cancel).
+- Open checklist: unticked items only, ordered by `position`. Each row = checkbox + text field; tap checkbox toggles; tap/focus text to edit **inline** without layout shift (Enter/blur save, Escape cancel).
+- Ticked section (Google Keep style): ticked items render only here, at the bottom, strikethrough and reduced opacity, also ordered by `position`. Header is a collapse control (`aria-expanded`) showing the count (e.g. “2 ticked”). Collapsed by default; collapse state is client-only and not persisted. Ticking an item does not force-expand. Hidden when nothing is ticked. Unticking restores the item among open items by `position` without rewriting positions. Inline edit and trailing delete work the same as the open checklist.
+- Clear: a button on the ticked header (visible only when there are ticked items) opens a confirm dialog, then deletes every ticked item. Unticked items are untouched.
 - Delete item via trailing icon.
 - Sticky/bottom add row: text field + add button.
-- Empty state when no items.
+- Empty state (“No items yet”) only when the list has zero items. A fully ticked list still shows the ticked section.
 
 ### 5. Settings
 

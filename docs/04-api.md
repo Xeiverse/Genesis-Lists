@@ -55,6 +55,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 | POST | `/api/lists/{id}/items` | Yes | Add item `{ "text": "..." }` |
 | PATCH | `/api/items/{id}` | Yes | Update `{ "text"?, "checked"?, "position"? }` |
 | DELETE | `/api/items/{id}` | Yes | Delete item |
+| DELETE | `/api/lists/{id}/items/checked` | Yes | Delete every ticked item on a list. `204` when owned, including when nothing is ticked (idempotent). No body. `404` if the list is missing or not owned |
 
 ### Health
 

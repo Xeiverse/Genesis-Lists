@@ -79,4 +79,8 @@ docs/               Specs (canonical OpenAPI)
 
 ## License
 
-[MIT](LICENSE)
+Copyright (c) 2026 Genesis Lists contributors.
+
+Genesis Lists is free software licensed under the [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). If you run a modified version as a network service, you must offer users the corresponding source.
+
+The Material Symbols receipt glyph is separately licensed under the [Apache License 2.0](apps/web/public/licenses/material-symbols/LICENSE). See the accompanying [NOTICE](apps/web/public/licenses/material-symbols/NOTICE).

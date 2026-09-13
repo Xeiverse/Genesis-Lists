@@ -2,6 +2,7 @@
   "name": "genesis-lists",
   "private": true,
   "version": "1.0.0",
+  "license": "AGPL-3.0-only",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "pnpm --filter @genesis-lists/shared build && pnpm -r --parallel --filter @genesis-lists/server --filter @genesis-lists/web dev",

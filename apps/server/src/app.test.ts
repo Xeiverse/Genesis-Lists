@@ -264,6 +264,90 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(items.json().items[0].text, "Oat milk");
   });
 
+  await it("clear checked items leaves unchecked and is idempotent", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      headers: { cookie: cookieA },
+      payload: { name: "Clear me" },
+    });
+    assert.equal(created.statusCode, 201);
+    const clearListId = created.json().id as string;
+
+    const milk = await app.inject({
+      method: "POST",
+      url: `/api/lists/${clearListId}/items`,
+      headers: { cookie: cookieA },
+      payload: { text: "Milk" },
+    });
+    const bread = await app.inject({
+      method: "POST",
+      url: `/api/lists/${clearListId}/items`,
+      headers: { cookie: cookieA },
+      payload: { text: "Bread" },
+    });
+    assert.equal(milk.statusCode, 201);
+    assert.equal(bread.statusCode, 201);
+
+    const tick = await app.inject({
+      method: "PATCH",
+      url: `/api/items/${milk.json().id}`,
+      headers: { cookie: cookieA },
+      payload: { checked: true },
+    });
+    assert.equal(tick.statusCode, 200);
+
+    const clear = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${clearListId}/items/checked`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(clear.statusCode, 204);
+
+    const remaining = await app.inject({
+      method: "GET",
+      url: `/api/lists/${clearListId}/items`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(remaining.statusCode, 200);
+    assert.deepEqual(
+      remaining.json().items.map((item: { text: string; checked: boolean }) => ({
+        text: item.text,
+        checked: item.checked,
+      })),
+      [{ text: "Bread", checked: false }],
+    );
+
+    const again = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${clearListId}/items/checked`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(again.statusCode, 204);
+
+    const still = await app.inject({
+      method: "GET",
+      url: `/api/lists/${clearListId}/items`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(still.json().items.length, 1);
+
+    const foreign = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${clearListId}/items/checked`,
+      headers: { cookie: cookieB },
+    });
+    assert.equal(foreign.statusCode, 404);
+    assert.equal(foreign.json().error.code, "NOT_FOUND");
+
+    const removed = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${clearListId}`,
+      headers: { cookie: cookieA },
+    });
+    assert.equal(removed.statusCode, 204);
+  });
+
   await it("bob gets 404 on alice list and items", async () => {
     const getItems = await app.inject({
       method: "GET",

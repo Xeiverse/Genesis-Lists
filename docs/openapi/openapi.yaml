@@ -273,6 +273,27 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
+  /api/lists/{id}/items/checked:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    delete:
+      operationId: clearCheckedItems
+      summary: Delete every ticked item on a list
+      description: >
+        Deletes items where checked is true. Unticked items are left in place.
+        Idempotent: 204 when the list is owned even if nothing is ticked.
+        404 if the list is missing or not owned (no existence leak).
+      tags: [Items]
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Ticked items deleted (or none were ticked)
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /api/items/{id}:
     parameters:
       - $ref: '#/components/parameters/ItemId'

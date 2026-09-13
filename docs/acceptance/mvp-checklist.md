@@ -25,6 +25,8 @@ MVP accepted **12 September 2026** against the current specs. Automated items ru
 - [x] **REQ-ITEM-03** Toggle checked — *API test + browser*
 - [x] **REQ-ITEM-04** Delete item — *API test + browser*
 - [x] **REQ-ITEM-05** User B accessing User A list/item → `404` — *API test (GET / PATCH / DELETE)*
+- [ ] **REQ-ITEM-06** `DELETE /api/lists/{id}/items/checked` removes only ticked items; unticked remain; zero ticked still `204`; User B → `404`
+- [ ] **REQ-ITEM-06** Ticked items appear in a collapsed-by-default section; untick returns the item among open items by position; Clear confirms then removes ticked items only
 
 ## UI & ops
 

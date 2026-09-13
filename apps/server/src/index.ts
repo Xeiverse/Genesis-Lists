@@ -1,15 +1,18 @@
 import path from "node:path";
 import { buildApp } from "./app.js";
+import { resolveSessionSecret } from "./util.js";
 
 const port = Number(process.env.PORT ?? 3000);
 const databasePath =
   process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "dev.db");
-const sessionSecret =
-  process.env.SESSION_SECRET ?? "dev-insecure-session-secret-change-me";
 const cookieSecure =
   process.env.COOKIE_SECURE !== undefined
     ? process.env.COOKIE_SECURE === "true"
     : process.env.NODE_ENV === "production";
+const sessionSecret = resolveSessionSecret({
+  sessionSecret: process.env.SESSION_SECRET,
+  cookieSecure,
+});
 
 const staticDir =
   process.env.STATIC_DIR ??

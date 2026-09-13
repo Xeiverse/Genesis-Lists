@@ -18,12 +18,19 @@ flowchart LR
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | `3000` | HTTP listen port |
-| `SESSION_SECRET` | **Yes** (production) | — | Secret for signing/encrypting sessions; long random string |
-| `DATABASE_PATH` | No | `/data/app.db` | SQLite file path |
-| `NODE_ENV` | No | `production` | Node environment |
-| `COOKIE_SECURE` | No | `true` when production | Set `false` only for local HTTP testing |
+| `SESSION_SECRET` | **Yes** when `COOKIE_SECURE=true` | Dev/local placeholder | Secret used to **sign** the session cookie. When `COOKIE_SECURE=true`, must be at least 32 characters and must not be a known placeholder (`change-me`, `change-me-to-a-long-random-string`, `dev-insecure-session-secret-change-me`, `replace-with-long-random-value`, `secret`). Local HTTP (`COOKIE_SECURE=false`) may use a placeholder and logs a warning. |
+| `DATABASE_PATH` | No | `/data/app.db` in Docker; `./data/dev.db` in local dev | SQLite file path |
+| `NODE_ENV` | No | `production` (Compose) | Node environment |
+| `COOKIE_SECURE` | No | Compose: `false` (local HTTP). App: `true` when `NODE_ENV=production` if unset | Set `true` behind HTTPS. Set `false` only for local HTTP testing |
+| `STATIC_DIR` | No | `/app/apps/web/dist` in Docker | Directory of the built SPA |
 
-## Compose sketch
+JSON request bodies larger than **16 KiB** are rejected (`400 VALIDATION_ERROR`).
+
+On startup the app **bootstraps the schema** with `CREATE TABLE IF NOT EXISTS` (not a separate migration runner). Existing databases are left intact; new tables/indexes are added if missing.
+
+## Compose file
+
+The build context ignores `node_modules` and local data files (see `.dockerignore`) so the Linux image is not polluted by the host install.
 
 ```yaml
 services:
@@ -32,20 +39,27 @@ services:
     ports:
       - "3000:3000"
     environment:
-      SESSION_SECRET: change-me
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-string}
       DATABASE_PATH: /data/app.db
+      STATIC_DIR: /app/apps/web/dist
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      NODE_ENV: production
+      PORT: 3000
     volumes:
       - genesis-data:/data
+    restart: unless-stopped
 
 volumes:
   genesis-data:
 ```
 
-Exact file: repository root `docker-compose.yml`.
+`COOKIE_SECURE` defaults to `false` so `docker compose up` works on `http://localhost:3000`. The placeholder `SESSION_SECRET` is allowed in that mode and prints a warning. For a public or HTTPS deploy, set a strong `SESSION_SECRET` and `COOKIE_SECURE=true`.
 
 ## Reverse proxy / HTTPS
 
-Terminate TLS at Caddy, Traefik, or nginx. Forward to `http://app:3000`. Ensure `COOKIE_SECURE=true` and users hit HTTPS so session cookies are sent.
+Terminate TLS at Caddy, Traefik, or nginx. Forward to `http://app:3000`. Ensure `COOKIE_SECURE=true`, a strong `SESSION_SECRET`, and that users hit HTTPS so session cookies are sent.
+
+Rate-limit `/api/auth/login` and `/api/auth/register` at the reverse proxy if the instance is reachable from the public internet (the app does not ship a distributed rate limiter).
 
 ## Backup
 
@@ -57,4 +71,4 @@ Restore by replacing the file (with the app stopped) and restarting.
 
 ## Upgrades
 
-Pull/rebuild image, recreate container, keep the same volume. Run DB migrations on startup (app responsibility).
+Pull/rebuild image, recreate container, keep the same volume. Schema bootstrap runs on startup and is idempotent.

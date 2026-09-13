@@ -12,6 +12,7 @@ Requirement IDs (`REQ-*`) map to [acceptance/mvp-checklist.md](acceptance/mvp-ch
 | REQ-AUTH-02 | As a registered user, I can log in | Correct credentials establish a session; wrong credentials fail without revealing which field is wrong beyond a generic auth error |
 | REQ-AUTH-03 | As a logged-in user, I can log out | Session ends; protected routes require login again |
 | REQ-AUTH-04 | As a logged-in user, I can see who I am | `GET /api/auth/me` returns my user id and username |
+| REQ-AUTH-05 | As a logged-in user, I can change my password | Correct current password updates the hash; wrong current password fails; I can log in with the new password |
 
 ### Lists
 
@@ -43,7 +44,8 @@ Requirement IDs (`REQ-*`) map to [acceptance/mvp-checklist.md](acceptance/mvp-ch
 
 - Shared lists, invites, roles
 - OIDC / Authentik / SSO
-- Email verification, password reset
+- Email verification, password reset (email-based)
+- Authenticated password change is in scope (REQ-AUTH-05)
 - Item quantities, categories, stores
 - Drag-and-drop reorder UI (API may support `position`; UI reorder is optional polish)
 - Real-time collaboration

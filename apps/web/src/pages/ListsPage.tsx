@@ -31,6 +31,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SearchIcon from "@mui/icons-material/Search";
 import type { ListDto } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
+import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
 
 export function ListsPage() {
@@ -114,7 +115,8 @@ export function ListsPage() {
     <Box sx={{ minHeight: "100dvh", bgcolor: "background.default" }}>
       <AppBar position="sticky" color="primary" enableColorOnDark>
         <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          <AppMark size={32} inverted />
+          <Typography variant="h6" sx={{ flexGrow: 1, ml: 1.5 }}>
             Genesis Lists
           </Typography>
           <IconButton

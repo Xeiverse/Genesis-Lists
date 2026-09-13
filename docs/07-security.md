@@ -27,7 +27,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
-| Secret leakage | `SESSION_SECRET` via env; never commit secrets; refuse known placeholders when `COOKIE_SECURE=true` |
+| Secret leakage | `SESSION_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
 | Oversize payloads | 16 KiB JSON body limit |
 
 ## Out of scope for MVP security features

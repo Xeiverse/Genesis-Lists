@@ -52,14 +52,14 @@ pnpm build
 ## Quick start (self-host)
 
 ```bash
-# Set a strong secret in production
-set SESSION_SECRET=replace-with-long-random-value   # Windows
-# export SESSION_SECRET=replace-with-long-random-value  # Unix
+# COOKIE_SECURE=true requires 32+ random characters (not a placeholder)
+set SESSION_SECRET=   # Windows: paste a long random value
+# export SESSION_SECRET=   # Unix
 
 docker compose up -d --build
 ```
 
-Open http://localhost:3000. Compose defaults `COOKIE_SECURE=false` for local HTTP and may use a placeholder `SESSION_SECRET` (warning in logs). For production, put a reverse proxy with HTTPS in front and set `COOKIE_SECURE=true` plus a strong `SESSION_SECRET`.
+Open http://localhost:3000. Compose defaults `COOKIE_SECURE=false` for local HTTP and may use a placeholder `SESSION_SECRET` (warning in logs). For production, put a reverse proxy with HTTPS in front and set `COOKIE_SECURE=true` plus a `SESSION_SECRET` of at least 32 random characters.
 
 See [Self-hosting](docs/06-self-hosting.md) for env vars, volumes, and backup.
 

@@ -18,7 +18,7 @@ flowchart LR
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PORT` | No | `3000` | HTTP listen port |
-| `SESSION_SECRET` | **Yes** when `COOKIE_SECURE=true` | Dev/local placeholder | Secret used to **sign** the session cookie; long random string. Known placeholders (`change-me`, `change-me-to-a-long-random-string`, `dev-insecure-session-secret-change-me`) are rejected when `COOKIE_SECURE=true`. Local HTTP (`COOKIE_SECURE=false`) may use a placeholder and logs a warning. |
+| `SESSION_SECRET` | **Yes** when `COOKIE_SECURE=true` | Dev/local placeholder | Secret used to **sign** the session cookie. When `COOKIE_SECURE=true`, must be at least 32 characters and must not be a known placeholder (`change-me`, `change-me-to-a-long-random-string`, `dev-insecure-session-secret-change-me`, `replace-with-long-random-value`, `secret`). Local HTTP (`COOKIE_SECURE=false`) may use a placeholder and logs a warning. |
 | `DATABASE_PATH` | No | `/data/app.db` in Docker; `./data/dev.db` in local dev | SQLite file path |
 | `NODE_ENV` | No | `production` (Compose) | Node environment |
 | `COOKIE_SECURE` | No | Compose: `false` (local HTTP). App: `true` when `NODE_ENV=production` if unset | Set `true` behind HTTPS. Set `false` only for local HTTP testing |

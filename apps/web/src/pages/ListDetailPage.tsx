@@ -300,7 +300,7 @@ export function ListDetailPage() {
                       checked={item.checked}
                       onChange={() => void toggle(item)}
                       inputProps={{
-                        "aria-labelledby": `item-text-${item.id}`,
+                        "aria-label": `toggle ${item.text}`,
                       }}
                     />
                   </ListItemIcon>

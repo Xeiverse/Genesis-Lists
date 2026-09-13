@@ -24,7 +24,7 @@ All endpoints are under `/api`.
 }
 ```
 
-Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
+Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `INTERNAL_ERROR`.
 
 ## Endpoints
 
@@ -32,11 +32,12 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/auth/register` | No | Create account + session |
+| POST | `/api/auth/register` | No | Create account + session. `403 FORBIDDEN` when registration is closed |
+| GET | `/api/auth/registration` | No | `{ "open": true \| false }` — whether new accounts can be created |
 | POST | `/api/auth/login` | No | Create session |
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/auth/me` | Yes | Current user |
-| POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }` |
+| POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions for this user; the current session stays signed in |
 
 ### Lists
 
@@ -61,7 +62,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/health` | No | Liveness `{ "status": "ok" }` |
+| GET | `/api/health` | No | `{ "status": "ok", "version", "schemaVersion" }` after a successful database check. `503` `{ "status": "error", "version" }` if the database cannot be queried |
 
 ## Conventions
 

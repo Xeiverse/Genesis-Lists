@@ -2,16 +2,22 @@ import Fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import fs from "node:fs";
 import path from "node:path";
-import { createDb } from "./db/index.js";
+import { createDb, dbIsReady, getSchemaVersion } from "./db/index.js";
 import { registerAuth } from "./routes/auth.js";
 import { registerListRoutes } from "./routes/lists.js";
-import { BODY_LIMIT_BYTES, sendError } from "./util.js";
+import {
+  BODY_LIMIT_BYTES,
+  sendError,
+  type RegistrationMode,
+} from "./util.js";
 
 export type AppConfig = {
   databasePath: string;
   sessionSecret: string;
   cookieSecure: boolean;
   staticDir?: string;
+  registrationMode?: RegistrationMode;
+  version?: string;
 };
 
 async function buildFastify(config: AppConfig) {
@@ -67,11 +73,23 @@ async function buildFastify(config: AppConfig) {
     return sendError(reply, 500, "INTERNAL_ERROR", "Internal server error");
   });
 
-  app.get("/api/health", async () => ({ status: "ok" as const }));
+  const version = config.version ?? "0.0.0";
+
+  app.get("/api/health", async (_request, reply) => {
+    if (!dbIsReady(db)) {
+      return reply.status(503).send({ status: "error" as const, version });
+    }
+    return {
+      status: "ok" as const,
+      version,
+      schemaVersion: getSchemaVersion(db),
+    };
+  });
 
   await registerAuth(app, db, {
     cookieSecure: config.cookieSecure,
     sessionSecret: config.sessionSecret,
+    registrationMode: config.registrationMode ?? "bootstrap",
   });
   await registerListRoutes(app, db);
 

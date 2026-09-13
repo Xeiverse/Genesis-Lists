@@ -79,9 +79,20 @@ export type ListItemDto = {
 export type ErrorCode =
   | "VALIDATION_ERROR"
   | "UNAUTHORIZED"
+  | "FORBIDDEN"
   | "NOT_FOUND"
   | "CONFLICT"
   | "INTERNAL_ERROR";
+
+export type RegistrationStatusDto = {
+  open: boolean;
+};
+
+export type HealthDto = {
+  status: "ok";
+  version: string;
+  schemaVersion: number;
+};
 
 export type ApiErrorBody = {
   error: {

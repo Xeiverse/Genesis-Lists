@@ -1,8 +1,9 @@
 {
   "name": "@genesis-lists/server",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "files": ["dist"],
   "scripts": {
     "dev": "node --experimental-sqlite --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",

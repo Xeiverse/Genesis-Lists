@@ -13,6 +13,7 @@ import {
   nowIso,
   sendError,
   uuid,
+  type RegistrationMode,
 } from "../util.js";
 
 function sessionExpiry() {
@@ -24,8 +25,20 @@ function sessionExpiry() {
 export async function registerAuth(
   app: FastifyInstance,
   db: Db,
-  opts: { cookieSecure: boolean; sessionSecret: string },
+  opts: {
+    cookieSecure: boolean;
+    sessionSecret: string;
+    registrationMode: RegistrationMode;
+  },
 ) {
+  function registrationOpen() {
+    if (opts.registrationMode === "open") return true;
+    if (opts.registrationMode === "closed") return false;
+    const row = db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as {
+      n: number | bigint;
+    };
+    return Number(row.n) === 0;
+  }
   await app.register(cookie, {
     secret: opts.sessionSecret,
   });
@@ -81,7 +94,15 @@ export async function registerAuth(
     return id;
   }
 
+  app.get("/api/auth/registration", async () => ({
+    open: registrationOpen(),
+  }));
+
   app.post("/api/auth/register", async (request, reply) => {
+    if (!registrationOpen()) {
+      return sendError(reply, 403, "FORBIDDEN", "Registration is closed");
+    }
+
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
       const detail = parsed.error.issues
@@ -193,6 +214,16 @@ export async function registerAuth(
       passwordHash,
       request.user.id,
     );
+
+    const sessionId = readSessionId(request);
+    if (sessionId) {
+      db.prepare(`DELETE FROM sessions WHERE user_id = ? AND id != ?`).run(
+        request.user.id,
+        sessionId,
+      );
+    } else {
+      db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(request.user.id);
+    }
 
     return reply.status(204).send();
   });

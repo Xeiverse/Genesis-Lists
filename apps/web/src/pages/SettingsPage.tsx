@@ -127,7 +127,7 @@ export function SettingsPage() {
 
       <Snackbar open={success} autoHideDuration={4000} onClose={() => setSuccess(false)}>
         <Alert severity="success" onClose={() => setSuccess(false)}>
-          Password updated
+          Password updated. Other sessions were signed out.
         </Alert>
       </Snackbar>
     </Box>

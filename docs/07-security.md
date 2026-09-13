@@ -7,6 +7,7 @@
 - Sessions established on register/login via an **HTTP-only**, **signed** cookie (not accessible to JS). The cookie payload is a random session id; the server looks it up in the `sessions` table.
 - Cookie is signed with `SESSION_SECRET`. `Secure` flag on when HTTPS / `COOKIE_SECURE=true`; `SameSite=Lax`.
 - Logout deletes the server-side session row and clears the cookie.
+- Changing a password deletes every other session for that user. The session that submitted the change stays signed in so Settings does not kick you out.
 
 ## Password & username policy
 
@@ -28,6 +29,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
 | Secret leakage | `SESSION_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
+| Open registration | `ALLOW_REGISTRATION` (see [self-hosting](06-self-hosting.md)). Unset/`bootstrap` closes after the first account. A public instance with registration open lets anyone create accounts |
 | Oversize payloads | 16 KiB JSON body limit |
 
 ## Out of scope for MVP security features

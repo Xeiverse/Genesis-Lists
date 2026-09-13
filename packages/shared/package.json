@@ -1,8 +1,9 @@
 {
   "name": "@genesis-lists/shared",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "files": ["dist"],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

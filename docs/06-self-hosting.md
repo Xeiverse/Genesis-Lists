@@ -1,74 +1,205 @@
-# Self-Hosting
+# Self-hosting
 
-## Default model
+This is the setup guide for running Genesis Lists yourself. You do not need the source code once a release image is published.
 
-One Docker Compose service runs the API and serves the built SPA. SQLite lives on a named volume.
+## What you are running
+
+One container serves the website and the API. Lists live in a SQLite file on a Docker volume named `genesis-data`. Compose prefixes that with the project name (usually the folder name), so the volume is often `genesis-lists_genesis-data`. Renaming the project or the volume makes the app look empty; the old data is still in the previous volume (`docker volume ls`).
 
 ```mermaid
 flowchart LR
-  Proxy[Optional_Reverse_Proxy]
-  App[genesis-lists_container]
-  Vol[(sqlite_volume)]
+  Proxy[Reverse_proxy]
+  App[genesis-lists]
+  Vol[(genesis-data)]
   Proxy --> App
   App --> Vol
 ```
+
+## Requirements
+
+- Docker Engine with Compose v2.
+- About 256 MB of RAM and a few hundred MB of disk for a household install. The SQLite file grows with your lists.
+- For a public URL: a domain and a reverse proxy that terminates HTTPS (example below).
+
+## 1. Local try-out
+
+From a clone of this repository:
+
+```bash
+docker compose up -d --build
+```
+
+Open http://localhost:3000 and create an account. Local Compose leaves `COOKIE_SECURE=false` (plain HTTP) and `ALLOW_REGISTRATION=true` (anyone who can open the URL can register). That is fine on your machine. Do not publish port 3000 to the internet with those defaults.
+
+Until the `v1.0.0` image is on GHCR, `--build` is required. After it is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
+
+## 2. Production
+
+### Secret
+
+```bash
+openssl rand -base64 32
+```
+
+Put the value in an env file. Do not commit it. Copy [`deploy/env.production.example`](../deploy/env.production.example):
+
+```bash
+cp deploy/env.production.example .env
+# edit .env and set SESSION_SECRET
+```
+
+`COOKIE_SECURE=true` refuses to start if `SESSION_SECRET` is missing, shorter than 32 characters, or a known placeholder (`change-me`, `secret`, and the strings in the example file).
+
+### Registration
+
+Anyone who can open the site can create an account when registration is open. That writes into your database.
+
+| `ALLOW_REGISTRATION` | Behavior |
+|----------------------|----------|
+| unset, empty, or `bootstrap` | Open until the first account exists, then closed |
+| `true` | Always open |
+| `false` | Always closed, including before the first account |
+
+Local Compose defaults this to `true`. A production env file should set `ALLOW_REGISTRATION=bootstrap` (or omit it only if you are not using the Compose default). After the first account, registration is already closed. To add another person: set `ALLOW_REGISTRATION=true`, `docker compose up -d`, let them register, set it back to `bootstrap` or `false`, and recreate the container.
+
+The app logs a warning while registration is explicitly open.
+
+### Start
+
+```bash
+docker compose --env-file .env up -d
+```
+
+From source (or before the image exists on GHCR):
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+Check:
+
+```bash
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+A healthy process returns `"status":"ok"`, a `version`, and `schemaVersion`. `503` means the process is up but SQLite could not be queried.
+
+### HTTPS (Caddy)
+
+Do not expose port 3000 publicly. Terminate TLS in front of the container and set `COOKIE_SECURE=true`. A starter Caddyfile is [`deploy/Caddyfile.example`](../deploy/Caddyfile.example).
+
+Typical Compose addition (same Docker network as the app; do not publish `3000` in this case — remove the `ports` mapping or bind it to localhost):
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+```
+
+**Login succeeds, then you are immediately logged out** almost always means the session cookie is marked `Secure` (`COOKIE_SECURE=true`) while the browser is on plain HTTP, or the reverse (`COOKIE_SECURE=false` is fine only for HTTP). Users must hit HTTPS, and the proxy must forward to `http://app:3000`.
+
+If the instance is reachable from the public internet, rate-limit `POST /api/auth/login` and `POST /api/auth/register` at the proxy. The app does not ship a distributed rate limiter.
 
 ## Environment variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PORT` | No | `3000` | HTTP listen port |
-| `SESSION_SECRET` | **Yes** when `COOKIE_SECURE=true` | Dev/local placeholder | Secret used to **sign** the session cookie. When `COOKIE_SECURE=true`, must be at least 32 characters and must not be a known placeholder (`change-me`, `change-me-to-a-long-random-string`, `dev-insecure-session-secret-change-me`, `replace-with-long-random-value`, `secret`). Local HTTP (`COOKIE_SECURE=false`) may use a placeholder and logs a warning. |
+| `PORT` | No | `3000` | HTTP listen port inside the container |
+| `SESSION_SECRET` | **Yes** when `COOKIE_SECURE=true` | Dev/local placeholder | Signs the session cookie. When `COOKIE_SECURE=true`, must be at least 32 characters and must not be a known placeholder. Local HTTP may use a placeholder and logs a warning. Changing this signs everyone out. |
 | `DATABASE_PATH` | No | `/data/app.db` in Docker; `./data/dev.db` in local dev | SQLite file path |
 | `NODE_ENV` | No | `production` (Compose) | Node environment |
-| `COOKIE_SECURE` | No | Compose: `false` (local HTTP). App: `true` when `NODE_ENV=production` if unset | Set `true` behind HTTPS. Set `false` only for local HTTP testing |
-| `STATIC_DIR` | No | `/app/apps/web/dist` in Docker | Directory of the built SPA |
+| `COOKIE_SECURE` | No | Compose: `false` (local HTTP). App: `true` when `NODE_ENV=production` if unset | `true` behind HTTPS. `false` only for local HTTP |
+| `ALLOW_REGISTRATION` | No | App: bootstrap. Compose default: `true` | `true`, `false`, or `bootstrap`. See above |
+| `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
+| `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
+| `GENESIS_LISTS_VERSION` | No | `1.0.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
 
 JSON request bodies larger than **16 KiB** are rejected (`400 VALIDATION_ERROR`).
 
-On startup the app **bootstraps the schema** with `CREATE TABLE IF NOT EXISTS` (not a separate migration runner). Existing databases are left intact; new tables/indexes are added if missing.
+## Data and upgrades
 
-## Compose file
+On startup the app applies numbered schema steps and records them in `schema_migrations`. Existing 1.0 databases are left intact. Later releases add a migration step instead of expecting you to edit the file. `GET /api/health` includes `schemaVersion` so you can confirm the upgrade ran.
 
-The build context ignores `node_modules` and local data files (see `.dockerignore`) so the Linux image is not polluted by the host install.
+The image runs as user id **10001**. A volume created by an older root image can fail with `EACCES` on `/data`. One-time fix (project name prefix may differ; check `docker volume ls`):
 
-```yaml
-services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-long-random-string}
-      DATABASE_PATH: /data/app.db
-      STATIC_DIR: /app/apps/web/dist
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      NODE_ENV: production
-      PORT: 3000
-    volumes:
-      - genesis-data:/data
-    restart: unless-stopped
-
-volumes:
-  genesis-data:
+```bash
+docker compose stop
+docker run --rm -v genesis-lists_genesis-data:/data alpine chown -R 10001:10001 /data
+docker compose up -d
 ```
 
-`COOKIE_SECURE` defaults to `false` so `docker compose up` works on `http://localhost:3000`. The placeholder `SESSION_SECRET` is allowed in that mode and prints a warning. For a public or HTTPS deploy, set a strong `SESSION_SECRET` and `COOKIE_SECURE=true`.
+### Backup
 
-## Reverse proxy / HTTPS
+The database uses WAL. Copying only `app.db` while the app is running can miss recent writes. Prefer a SQLite backup. The image includes the `sqlite3` CLI. The app user can write into `/data`.
 
-Terminate TLS at Caddy, Traefik, or nginx. Forward to `http://app:3000`. Ensure `COOKIE_SECURE=true`, a strong `SESSION_SECRET`, and that users hit HTTPS so session cookies are sent.
+```bash
+docker compose exec app sqlite3 /data/app.db ".backup /data/genesis-lists-backup.db"
+docker compose cp app:/data/genesis-lists-backup.db ./genesis-lists-backup.db
+docker compose exec app rm -f /data/genesis-lists-backup.db
+```
 
-Rate-limit `/api/auth/login` and `/api/auth/register` at the reverse proxy if the instance is reachable from the public internet (the app does not ship a distributed rate limiter).
+If `exec` is unavailable, stop the app and copy the database and its sidecars:
 
-## Backup
+```bash
+docker compose stop
+docker run --rm -v genesis-lists_genesis-data:/data -v "$PWD":/backup alpine \
+  sh -c "cp /data/app.db /data/app.db-wal /data/app.db-shm /backup/ 2>/dev/null || cp /data/app.db /backup/"
+docker compose up -d
+```
 
-1. Stop or briefly quiesce writes if possible.
-2. Copy the SQLite file from the volume (e.g. `/data/app.db`).
-3. Optionally use `sqlite3 .backup` for a consistent copy while running.
+### Restore
 
-Restore by replacing the file (with the app stopped) and restarting.
+Stop the app, replace the database, and remove stale WAL files so SQLite does not replay an old journal over the restored file.
 
-## Upgrades
+```bash
+docker compose stop
+docker run --rm -v genesis-lists_genesis-data:/data -v "$PWD":/backup alpine \
+  sh -c "cp /backup/genesis-lists-backup.db /data/app.db && rm -f /data/app.db-wal /data/app.db-shm && chown 10001:10001 /data/app.db"
+docker compose up -d
+```
 
-Pull/rebuild image, recreate container, keep the same volume. Schema bootstrap runs on startup and is idempotent.
+### Upgrade
+
+Image tags such as `1.0.0` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
+
+1. Back up (above).
+2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `1.1.0`).
+3. Pull and recreate, keeping the same volume:
+
+```bash
+docker compose pull
+docker compose up -d
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+4. Confirm `version` and `schemaVersion` in the health response.
+
+From source, use `docker compose up -d --build` instead of `pull`.
+
+### Rollback
+
+Set `GENESIS_LISTS_VERSION` back to the previous tag, `docker compose pull && docker compose up -d`. Do not roll back the image after a migration you have not tested; backup first so you can restore the file as well.
+
+Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in again. The database itself is unchanged.
+
+## Troubleshooting
+
+| Symptom | What to check |
+|---------|----------------|
+| Container exits immediately, log says `SESSION_SECRET is required` | `COOKIE_SECURE=true` with a missing, short, or placeholder secret. Generate a new one and recreate. |
+| Login works, then you are logged out | `COOKIE_SECURE` does not match the URL scheme. HTTPS requires `true`. HTTP (localhost only) requires `false`. |
+| Empty lists after an update | Volume name changed (`docker volume ls`). Point Compose back at the volume that has `app.db`. |
+| `EACCES` writing `/data` | Volume is still owned by root. `chown` to `10001:10001` as above. |
+| Register link is missing; register page says registration is closed | Expected after the first account when mode is `bootstrap`. Set `ALLOW_REGISTRATION=true`, recreate, add the account, then close it again. |
+| `/api/health` is `503` | Process is up but SQLite failed. Check the volume mount and file permissions. |
+| Cannot pull `ghcr.io/xeiverse/genesis-lists` | The tag has not been published yet. Use `docker compose up -d --build` from a checkout of that version. |

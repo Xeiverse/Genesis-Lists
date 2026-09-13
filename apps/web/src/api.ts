@@ -1,4 +1,10 @@
-import type { ListDto, ListItemDto, UserDto, ApiErrorBody } from "@genesis-lists/shared";
+import type {
+  ListDto,
+  ListItemDto,
+  RegistrationStatusDto,
+  UserDto,
+  ApiErrorBody,
+} from "@genesis-lists/shared";
 
 export class ApiError extends Error {
   code: string;
@@ -38,6 +44,10 @@ async function request<T>(
 }
 
 export const api = {
+  health: () =>
+    request<{ status: string; version: string; schemaVersion?: number }>("/api/health"),
+  registration: () =>
+    request<RegistrationStatusDto>("/api/auth/registration"),
   me: () => request<UserDto>("/api/auth/me"),
   register: (username: string, password: string) =>
     request<UserDto>("/api/auth/register", {

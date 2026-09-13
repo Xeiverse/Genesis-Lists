@@ -6,7 +6,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**MVP status:** accepted against the current specs ([acceptance checklist](docs/acceptance/mvp-checklist.md)). Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md).
+**Version:** 1.0.0. Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists` (see [Self-hosting](docs/06-self-hosting.md)).
 
 ## Features (MVP)
 
@@ -14,7 +14,8 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 - Add / edit / toggle / delete checklist items
 - Ticked items collect in a collapsible section with clear-all
 - Multi-user accounts with isolated data
-- Change password from Settings
+- Registration closes after the first account unless you leave it open
+- Change password from Settings (other sessions are signed out)
 - Material Design 3 responsive web UI
 - Docker self-hosting with SQLite
 
@@ -29,7 +30,8 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | [API overview](docs/04-api.md) | Human API guide |
 | [OpenAPI](docs/openapi/openapi.yaml) | Machine-readable API contract |
 | [UI/UX](docs/05-ui-ux.md) | Material Design 3 screens & flows |
-| [Self-hosting](docs/06-self-hosting.md) | Deploy, env, backup |
+| [Self-hosting](docs/06-self-hosting.md) | Deploy, HTTPS, backup, upgrade |
+| [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
 | [Roadmap](docs/08-roadmap.md) | Sharing, OIDC, PWA (post-MVP) |
 | [ADRs](docs/adr/) | Architecture decisions |
@@ -56,17 +58,15 @@ pnpm build
 
 ## Quick start (self-host)
 
-```bash
-# COOKIE_SECURE=true requires 32+ random characters (not a placeholder)
-set SESSION_SECRET=   # Windows: paste a long random value
-# export SESSION_SECRET=   # Unix
+Local HTTP (from this repository):
 
+```bash
 docker compose up -d --build
 ```
 
-Open http://localhost:3000. Compose defaults `COOKIE_SECURE=false` for local HTTP and may use a placeholder `SESSION_SECRET` (warning in logs). For production, put a reverse proxy with HTTPS in front and set `COOKIE_SECURE=true` plus a `SESSION_SECRET` of at least 32 random characters.
+Open http://localhost:3000. That path leaves registration open and cookies usable on HTTP. It is not a public deploy.
 
-See [Self-hosting](docs/06-self-hosting.md) for env vars, volumes, and backup.
+For a server, follow [Self-hosting](docs/06-self-hosting.md): generate `SESSION_SECRET`, set `COOKIE_SECURE=true`, keep registration in bootstrap mode, and put HTTPS in front. After `v1.0.0` is published, pin `GENESIS_LISTS_VERSION` and `docker compose pull` instead of rebuilding from git.
 
 ## Monorepo layout
 

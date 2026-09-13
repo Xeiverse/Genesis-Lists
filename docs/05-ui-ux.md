@@ -30,7 +30,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 
 - Product mark and “Genesis Lists” above the heading.
 - Centered card/form: username, password, submit.
-- Link to Register.
+- Link to Register, shown only when registration is open (`GET /api/auth/registration`).
 - Inline error for auth failure.
 - On success → Lists home.
 
@@ -41,6 +41,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 - Link to Login.
 - Validation messages for username/password rules ([01-requirements.md](01-requirements.md)).
 - On success → Lists home (session created).
+- If registration is closed, the form is replaced with a short message and a link back to Sign in. No request is sent until the operator opens registration.
 
 ### 3. Lists home
 
@@ -68,7 +69,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 
 - App bar: back, “Settings”.
 - Show signed-in username.
-- Change password form: current, new, confirm; success feedback; inline errors for mismatch / API failures.
+- Change password form: current, new, confirm; success feedback (other sessions are signed out); inline errors for mismatch / API failures.
 - Route: `/settings` (auth required).
 
 ## MD3 patterns
@@ -77,6 +78,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 - Prefer `Card` / `List` / `ListItem` / `Checkbox` / `Dialog` / `Fab` / `AppBar` / `TextField`.
 - Loading: skeleton or circular progress on initial fetch.
 - Errors: snackbar or inline alert; do not lose form input on validation errors.
+- Typeface is Roboto, bundled with the SPA (`@fontsource/roboto`). The app does not load fonts from a third-party CDN.
 
 ## Navigation
 

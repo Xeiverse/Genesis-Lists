@@ -76,4 +76,6 @@ A `list_members(list_id, user_id, role)` table can grant access without changing
 
 ## Sessions (implementation detail)
 
-MVP stores sessions in a `sessions` table (id, user_id, expires_at, created_at) with the session id in an HTTP-only cookie. See [07-security.md](07-security.md) and ADR 0002. Session storage is not exposed in the public API data model.
+MVP stores sessions in a `sessions` table (id, user_id, expires_at, created_at) with the session id in an HTTP-only cookie. See [07-security.md](07-security.md) and ADR 0002. Session storage is not exposed in the public API data model. Expired session rows are deleted on startup.
+
+Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API.

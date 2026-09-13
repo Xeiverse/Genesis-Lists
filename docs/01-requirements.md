@@ -12,7 +12,8 @@ Requirement IDs (`REQ-*`) map to [acceptance/mvp-checklist.md](acceptance/mvp-ch
 | REQ-AUTH-02 | As a registered user, I can log in | Correct credentials establish a session; wrong credentials fail without revealing which field is wrong beyond a generic auth error |
 | REQ-AUTH-03 | As a logged-in user, I can log out | Session ends; protected routes require login again |
 | REQ-AUTH-04 | As a logged-in user, I can see who I am | `GET /api/auth/me` returns my user id and username |
-| REQ-AUTH-05 | As a logged-in user, I can change my password | Correct current password updates the hash; wrong current password fails; I can log in with the new password |
+| REQ-AUTH-05 | As a logged-in user, I can change my password | Correct current password updates the hash; wrong current password fails; I can log in with the new password; other sessions for my account are deleted and the session that changed the password stays signed in |
+| REQ-AUTH-06 | As an operator, I can stop strangers creating accounts | `ALLOW_REGISTRATION` is `true` (always open), `false` (always closed), or unset/`bootstrap` (open only until the first account exists). Closed registration returns `403 FORBIDDEN`. `GET /api/auth/registration` reports `{ open }` without auth so the UI can hide the register form |
 
 ### Lists
 
@@ -40,6 +41,7 @@ Requirement IDs (`REQ-*`) map to [acceptance/mvp-checklist.md](acceptance/mvp-ch
 |----|------------|---------------------|
 | REQ-UI-01 | As a user, I can use the app on phone and desktop | Responsive MD3 UI; core flows usable at ~360px and ≥1024px widths |
 | REQ-OPS-01 | As a self-hoster, I can run the stack with Docker Compose | Documented compose up serves UI + API; data persists in a volume |
+| REQ-OPS-02 | As a self-hoster, I can tell which version is running and whether the database is reachable | `GET /api/health` returns `{ status: "ok", version, schemaVersion }` after a successful `SELECT 1`. If the database cannot be queried, the response is `503` with `{ status: "error", version }` |
 
 ## Out of scope (MVP)
 

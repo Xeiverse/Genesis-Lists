@@ -31,6 +31,19 @@ function isWeakSessionSecret(secret: string): boolean {
   );
 }
 
+export type RegistrationMode = "open" | "closed" | "bootstrap";
+
+/** Empty and `bootstrap` match an unset env var (first account, then closed). */
+export function resolveRegistrationMode(raw: string | undefined): RegistrationMode {
+  const value = raw?.trim().toLowerCase() ?? "";
+  if (value === "" || value === "bootstrap") return "bootstrap";
+  if (value === "true") return "open";
+  if (value === "false") return "closed";
+  throw new Error(
+    "ALLOW_REGISTRATION must be true, false, bootstrap, or unset.",
+  );
+}
+
 export function resolveSessionSecret(opts: {
   sessionSecret: string | undefined;
   cookieSecure: boolean;

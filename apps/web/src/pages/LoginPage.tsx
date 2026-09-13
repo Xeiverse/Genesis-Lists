@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { ApiError } from "../api";
+import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
 
@@ -22,6 +22,22 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .registration()
+      .then((status) => {
+        if (!cancelled) setRegistrationOpen(status.open);
+      })
+      .catch(() => {
+        if (!cancelled) setRegistrationOpen(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -73,11 +89,13 @@ export function LoginPage() {
           <Button type="submit" disabled={submitting} fullWidth>
             Sign in
           </Button>
-          <Box>
-            <Link component={RouterLink} to="/register">
-              Create an account
-            </Link>
-          </Box>
+          {registrationOpen && (
+            <Box>
+              <Link component={RouterLink} to="/register">
+                Create an account
+              </Link>
+            </Box>
+          )}
         </Stack>
       </Paper>
     </Container>

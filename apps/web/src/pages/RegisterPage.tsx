@@ -1,9 +1,10 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
 import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Container,
   Link,
   Paper,
@@ -12,7 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import { passwordSchema, usernameSchema } from "@genesis-lists/shared";
-import { ApiError } from "../api";
+import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
 
@@ -45,6 +46,22 @@ export function RegisterPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .registration()
+      .then((status) => {
+        if (!cancelled) setRegistrationOpen(status.open);
+      })
+      .catch(() => {
+        if (!cancelled) setRegistrationOpen(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -81,40 +98,53 @@ export function RegisterPage() {
           <Typography variant="h5" component="h1">
             Create account
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Username 3–32 chars (letters, numbers, _ -). Password min 8 characters.
-          </Typography>
-          {error && <Alert severity="error">{error}</Alert>}
-          <TextField
-            label="Username"
-            value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              if (usernameError) setUsernameError(null);
-            }}
-            autoComplete="username"
-            required
-            fullWidth
-            error={Boolean(usernameError)}
-            helperText={usernameError ?? "3–32 characters: letters, numbers, _ and -"}
-          />
-          <TextField
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              if (passwordError) setPasswordError(null);
-            }}
-            autoComplete="new-password"
-            required
-            fullWidth
-            error={Boolean(passwordError)}
-            helperText={passwordError ?? "At least 8 characters"}
-          />
-          <Button type="submit" disabled={submitting} fullWidth>
-            Register
-          </Button>
+          {registrationOpen === null ? (
+            <Stack alignItems="center" py={2}>
+              <CircularProgress size={28} />
+            </Stack>
+          ) : registrationOpen ? (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Username 3–32 chars (letters, numbers, _ -). Password min 8 characters.
+              </Typography>
+              {error && <Alert severity="error">{error}</Alert>}
+              <TextField
+                label="Username"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  if (usernameError) setUsernameError(null);
+                }}
+                autoComplete="username"
+                required
+                fullWidth
+                error={Boolean(usernameError)}
+                helperText={usernameError ?? "3–32 characters: letters, numbers, _ and -"}
+              />
+              <TextField
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError(null);
+                }}
+                autoComplete="new-password"
+                required
+                fullWidth
+                error={Boolean(passwordError)}
+                helperText={passwordError ?? "At least 8 characters"}
+              />
+              <Button type="submit" disabled={submitting} fullWidth>
+                Register
+              </Button>
+            </>
+          ) : (
+            <Alert severity="info">
+              Registration is closed. Ask the person who runs this server to open it if you
+              need an account.
+            </Alert>
+          )}
           <Box>
             <Link component={RouterLink} to="/login">
               Already have an account?

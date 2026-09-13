@@ -24,7 +24,7 @@ flowchart TB
 
 ## Trust boundaries
 
-- Unauthenticated clients may only call register/login (and health).
+- Unauthenticated clients may only call register (when open), login, registration status, and health.
 - Authenticated session cookie identifies the user; every list/item operation is scoped to that user.
 - The database file must not be exposed over HTTP; only the app process reads/writes it.
 

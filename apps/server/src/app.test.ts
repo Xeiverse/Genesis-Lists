@@ -28,6 +28,8 @@ describe("Genesis Lists API contract", async () => {
       databasePath: dbPath,
       sessionSecret: "test-secret",
       cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
     });
     await app.ready();
   });
@@ -47,7 +49,11 @@ describe("Genesis Lists API contract", async () => {
   await it("GET /api/health", async () => {
     const res = await app.inject({ method: "GET", url: "/api/health" });
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.json(), { status: "ok" });
+    assert.deepEqual(res.json(), {
+      status: "ok",
+      version: "1.0.0",
+      schemaVersion: 1,
+    });
   });
 
   await it("unauthenticated protected routes are 401", async () => {
@@ -475,6 +481,14 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(bad.statusCode, 401);
 
+    const otherSession = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { username: "bob", password: "password1" },
+    });
+    assert.equal(otherSession.statusCode, 200);
+    const cookieOther = getCookie(otherSession)!;
+
     const ok = await app.inject({
       method: "POST",
       url: "/api/auth/change-password",
@@ -482,6 +496,20 @@ describe("Genesis Lists API contract", async () => {
       payload: { currentPassword: "password1", newPassword: "password2" },
     });
     assert.equal(ok.statusCode, 204);
+
+    const otherMe = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: { cookie: cookieOther },
+    });
+    assert.equal(otherMe.statusCode, 401);
+
+    const meStill = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: { cookie: cookieB },
+    });
+    assert.equal(meStill.statusCode, 200);
 
     const oldLogin = await app.inject({
       method: "POST",
@@ -517,5 +545,87 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 400);
     assert.equal(res.json().error.code, "VALIDATION_ERROR");
+  });
+});
+
+describe("registration gate", async () => {
+  async function withApp(
+    registrationMode: "bootstrap" | "closed" | "open",
+    run: (app: FastifyInstance) => Promise<void>,
+  ) {
+    const dbPath = path.join(
+      os.tmpdir(),
+      `genesis-reg-${registrationMode}-${Date.now()}.db`,
+    );
+    const app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret",
+      cookieSecure: false,
+      registrationMode,
+      version: "1.0.0",
+    });
+    await app.ready();
+    try {
+      await run(app);
+    } finally {
+      await app.close();
+      for (const suffix of ["", "-wal", "-shm"]) {
+        try {
+          if (fs.existsSync(dbPath + suffix)) fs.unlinkSync(dbPath + suffix);
+        } catch {
+          // Windows may briefly keep handles
+        }
+      }
+    }
+  }
+
+  await it("bootstrap allows the first account then closes", async () => {
+    await withApp("bootstrap", async (app) => {
+      const open = await app.inject({
+        method: "GET",
+        url: "/api/auth/registration",
+      });
+      assert.equal(open.statusCode, 200);
+      assert.deepEqual(open.json(), { open: true });
+
+      const first = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "owner", password: "password1" },
+      });
+      assert.equal(first.statusCode, 201);
+
+      const closed = await app.inject({
+        method: "GET",
+        url: "/api/auth/registration",
+      });
+      assert.deepEqual(closed.json(), { open: false });
+
+      const second = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "guest", password: "password1" },
+      });
+      assert.equal(second.statusCode, 403);
+      assert.equal(second.json().error.code, "FORBIDDEN");
+    });
+  });
+
+  await it("closed rejects registration even when there are no users", async () => {
+    await withApp("closed", async (app) => {
+      const status = await app.inject({
+        method: "GET",
+        url: "/api/auth/registration",
+      });
+      assert.deepEqual(status.json(), { open: false });
+
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "owner", password: "password1" },
+      });
+      assert.equal(res.statusCode, 403);
+      assert.equal(res.json().error.code, "FORBIDDEN");
+    });
   });
 });

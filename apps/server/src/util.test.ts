@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   DEV_SESSION_SECRET,
   MIN_SESSION_SECRET_LENGTH,
+  resolveRegistrationMode,
   resolveSessionSecret,
 } from "./util.js";
 
@@ -52,5 +53,22 @@ describe("resolveSessionSecret", () => {
       resolveSessionSecret({ sessionSecret: strong, cookieSecure: true }),
       strong,
     );
+  });
+});
+
+describe("resolveRegistrationMode", () => {
+  it("treats unset, empty, and bootstrap as first-run bootstrap", () => {
+    assert.equal(resolveRegistrationMode(undefined), "bootstrap");
+    assert.equal(resolveRegistrationMode(""), "bootstrap");
+    assert.equal(resolveRegistrationMode("bootstrap"), "bootstrap");
+  });
+
+  it("accepts true and false", () => {
+    assert.equal(resolveRegistrationMode("true"), "open");
+    assert.equal(resolveRegistrationMode("false"), "closed");
+  });
+
+  it("rejects unknown values", () => {
+    assert.throws(() => resolveRegistrationMode("yes"), /ALLOW_REGISTRATION/);
   });
 });

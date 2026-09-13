@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Genesis Lists API
-  version: 0.1.0
+  version: 1.0.0
   description: |
     REST API for Genesis Lists MVP. Session cookie authentication.
     Spec is the source of truth — see docs/04-api.md.
@@ -22,6 +22,32 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
               example:
                 status: ok
+                version: "1.0.0"
+                schemaVersion: 1
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthErrorResponse'
+              example:
+                status: error
+                version: "1.0.0"
+
+  /api/auth/registration:
+    get:
+      operationId: getRegistration
+      summary: Whether new accounts can be created
+      tags: [Auth]
+      responses:
+        '200':
+          description: Registration status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationStatus'
+              example:
+                open: true
 
   /api/auth/register:
     post:
@@ -51,6 +77,8 @@ paths:
                 $ref: '#/components/schemas/User'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
         '409':
           $ref: '#/components/responses/ConflictError'
 
@@ -115,6 +143,9 @@ paths:
     post:
       operationId: changePassword
       summary: Change the current user's password
+      description: |
+        Updates the password hash. Other sessions for this user are deleted;
+        the session that made this request stays signed in.
       tags: [Auth]
       security:
         - sessionCookie: []
@@ -362,11 +393,35 @@ components:
   schemas:
     HealthResponse:
       type: object
-      required: [status]
+      required: [status, version, schemaVersion]
       properties:
         status:
           type: string
           enum: [ok]
+        version:
+          type: string
+          example: "1.0.0"
+        schemaVersion:
+          type: integer
+          minimum: 1
+          example: 1
+
+    HealthErrorResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        version:
+          type: string
+
+    RegistrationStatus:
+      type: object
+      required: [open]
+      properties:
+        open:
+          type: boolean
 
     ErrorBody:
       type: object
@@ -381,6 +436,7 @@ components:
               enum:
                 - VALIDATION_ERROR
                 - UNAUTHORIZED
+                - FORBIDDEN
                 - NOT_FOUND
                 - CONFLICT
                 - INTERNAL_ERROR
@@ -570,3 +626,13 @@ components:
             error:
               code: CONFLICT
               message: Username already taken
+    ForbiddenError:
+      description: Authenticated or policy refusal (for example registration closed)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Registration is closed

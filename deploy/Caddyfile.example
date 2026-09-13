@@ -1,0 +1,7 @@
+# Replace lists.example.com. Put this beside a Caddy container on the same
+# Docker network as the genesis-lists service (named "app" in docker-compose.yml).
+# Set COOKIE_SECURE=true. Do not publish the app's port 3000 to the public internet.
+
+lists.example.com {
+	reverse_proxy app:3000
+}

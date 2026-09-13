@@ -340,6 +340,14 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(foreign.statusCode, 404);
     assert.equal(foreign.json().error.code, "NOT_FOUND");
 
+    const missing = await app.inject({
+      method: "DELETE",
+      url: "/api/lists/00000000-0000-4000-8000-000000000000/items/checked",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(missing.statusCode, 404);
+    assert.equal(missing.json().error.code, "NOT_FOUND");
+
     const removed = await app.inject({
       method: "DELETE",
       url: `/api/lists/${clearListId}`,

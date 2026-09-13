@@ -5,7 +5,7 @@ import path from "node:path";
 import { createDb } from "./db/index.js";
 import { registerAuth } from "./routes/auth.js";
 import { registerListRoutes } from "./routes/lists.js";
-import { sendError } from "./util.js";
+import { BODY_LIMIT_BYTES, sendError } from "./util.js";
 
 export type AppConfig = {
   databasePath: string;
@@ -16,7 +16,7 @@ export type AppConfig = {
 
 async function buildFastify(config: AppConfig) {
   const db = createDb(config.databasePath);
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT_BYTES });
 
   // Empty bodies with Content-Type: application/json (common from fetch clients) must not 500.
   app.addContentTypeParser(
@@ -43,19 +43,27 @@ async function buildFastify(config: AppConfig) {
   );
 
   app.setErrorHandler((err, _request, reply) => {
-    app.log.error?.(err);
     if (reply.sent) return;
-    const error = err as Error & { statusCode?: number };
-    const status =
-      typeof error.statusCode === "number" ? error.statusCode : 500;
-    if (status >= 400 && status < 500) {
+    const error = err as Error & { statusCode?: number; code?: string };
+    const code = error.code;
+    const statusCode = error.statusCode;
+    if (code === "FST_ERR_CTP_BODY_TOO_LARGE" || statusCode === 413) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Request body too large");
+    }
+    if (
+      code === "FST_ERR_CTP_EMPTY_JSON_BODY" ||
+      (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500)
+    ) {
       return sendError(
         reply,
-        status,
+        typeof statusCode === "number" && statusCode >= 400 && statusCode < 500
+          ? statusCode
+          : 400,
         "VALIDATION_ERROR",
         error.message || "Invalid request body",
       );
     }
+    app.log.error?.(err);
     return sendError(reply, 500, "INTERNAL_ERROR", "Internal server error");
   });
 

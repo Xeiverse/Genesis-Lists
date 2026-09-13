@@ -10,9 +10,9 @@ MVP needs multi-user auth without OIDC complexity. SPA on same origin can use co
 
 ## Decision
 
-- Use **HTTP-only session cookies** after register/login.
+- Use **HTTP-only session cookies** after register/login. Cookies are **signed** with `SESSION_SECRET`; the payload is still a random session id.
 - Hash passwords with **argon2id**.
-- Store sessions server-side in SQLite (table `sessions`) keyed by a random session id in the cookie, so logout and rotation are straightforward.
+- Store sessions server-side in SQLite (table `sessions`) keyed by that session id, so logout and rotation are straightforward.
 - Defer JWT access tokens and OIDC to the roadmap.
 
 ## Consequences

@@ -15,6 +15,21 @@ export const authCredentialsSchema = z.object({
 
 export type AuthCredentials = z.infer<typeof authCredentialsSchema>;
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordSchema,
+});
+
+export type ChangePassword = z.infer<typeof changePasswordSchema>;
+
+export const PREVIEW_ITEM_LIMIT = 8;
+
+export type ListItemPreviewDto = {
+  id: string;
+  text: string;
+  checked: boolean;
+};
+
 export const createListSchema = z.object({
   name: z.string().trim().min(1).max(120),
 });
@@ -40,12 +55,6 @@ export const updateItemSchema = z
 export type UserDto = {
   id: string;
   username: string;
-};
-
-export type ListItemPreviewDto = {
-  id: string;
-  text: string;
-  checked: boolean;
 };
 
 export type ListDto = {

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
+  PREVIEW_ITEM_LIMIT,
   createItemSchema,
   createListSchema,
   updateItemSchema,
@@ -10,8 +11,6 @@ import {
 } from "@genesis-lists/shared";
 import type { Db, ItemRow, ListRow } from "../db/index.js";
 import { nowIso, requireUser, sendError, uuid } from "../util.js";
-
-const PREVIEW_ITEM_LIMIT = 5;
 
 function toListDto(
   row: ListRow,
@@ -28,30 +27,64 @@ function toListDto(
   };
 }
 
-function toPreviewDto(row: ItemRow): ListItemPreviewDto {
-  return {
-    id: row.id,
-    text: row.text,
-    checked: row.checked === 1,
-  };
-}
+function loadListPreviews(
+  db: Db,
+  listIds: string[],
+): Map<string, { previewItems: ListItemPreviewDto[]; itemCount: number }> {
+  const result = new Map<
+    string,
+    { previewItems: ListItemPreviewDto[]; itemCount: number }
+  >();
+  for (const id of listIds) {
+    result.set(id, { previewItems: [], itemCount: 0 });
+  }
+  if (listIds.length === 0) return result;
 
-function loadListPreview(db: Db, listId: string): {
-  previewItems: ListItemPreviewDto[];
-  itemCount: number;
-} {
-  const countRow = db
-    .prepare(`SELECT COUNT(*) AS cnt FROM list_items WHERE list_id = ?`)
-    .get(listId) as { cnt: number };
+  const placeholders = listIds.map(() => "?").join(", ");
+
+  const countRows = db
+    .prepare(
+      `SELECT list_id, COUNT(*) AS cnt FROM list_items
+       WHERE list_id IN (${placeholders})
+       GROUP BY list_id`,
+    )
+    .all(...listIds) as Array<{ list_id: string; cnt: number }>;
+  for (const row of countRows) {
+    const entry = result.get(row.list_id);
+    if (entry) entry.itemCount = row.cnt;
+  }
+
   const previewRows = db
     .prepare(
-      `SELECT * FROM list_items WHERE list_id = ? ORDER BY position ASC LIMIT ?`,
+      `SELECT id, list_id, text, checked, position
+       FROM (
+         SELECT id, list_id, text, checked, position,
+           ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY position ASC) AS rn
+         FROM list_items
+         WHERE list_id IN (${placeholders})
+       )
+       WHERE rn <= ?
+       ORDER BY list_id ASC, position ASC`,
     )
-    .all(listId, PREVIEW_ITEM_LIMIT) as ItemRow[];
-  return {
-    previewItems: previewRows.map(toPreviewDto),
-    itemCount: countRow.cnt,
-  };
+    .all(...listIds, PREVIEW_ITEM_LIMIT) as Array<{
+    id: string;
+    list_id: string;
+    text: string;
+    checked: number;
+    position: number;
+  }>;
+
+  for (const row of previewRows) {
+    const entry = result.get(row.list_id);
+    if (!entry) continue;
+    entry.previewItems.push({
+      id: row.id,
+      text: row.text,
+      checked: row.checked === 1,
+    });
+  }
+
+  return result;
 }
 
 function toItemDto(row: ItemRow): ListItemDto {
@@ -75,51 +108,19 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       .prepare(`SELECT * FROM lists WHERE owner_id = ? ORDER BY created_at ASC`)
       .all(user.id) as ListRow[];
 
-    if (rows.length === 0) {
-      return reply.send({ lists: [] });
-    }
-
-    const listIds = rows.map((r) => r.id);
-    const placeholders = listIds.map(() => "?").join(", ");
-
-    const countRows = db
-      .prepare(
-        `SELECT list_id, COUNT(*) AS cnt FROM list_items
-         WHERE list_id IN (${placeholders})
-         GROUP BY list_id`,
-      )
-      .all(...listIds) as { list_id: string; cnt: number }[];
-
-    const countByList = new Map(countRows.map((r) => [r.list_id, r.cnt]));
-
-    const itemRows = db
-      .prepare(
-        `SELECT id, list_id, text, checked, position, created_at, updated_at
-         FROM (
-           SELECT *,
-             ROW_NUMBER() OVER (PARTITION BY list_id ORDER BY position ASC) AS rn
-           FROM list_items
-           WHERE list_id IN (${placeholders})
-         )
-         WHERE rn <= ?`,
-      )
-      .all(...listIds, PREVIEW_ITEM_LIMIT) as ItemRow[];
-
-    const previewByList = new Map<string, ListItemPreviewDto[]>();
-    for (const item of itemRows) {
-      const bucket = previewByList.get(item.list_id) ?? [];
-      bucket.push(toPreviewDto(item));
-      previewByList.set(item.list_id, bucket);
-    }
+    const previews = loadListPreviews(
+      db,
+      rows.map((r) => r.id),
+    );
 
     return reply.send({
-      lists: rows.map((row) =>
-        toListDto(
-          row,
-          previewByList.get(row.id) ?? [],
-          countByList.get(row.id) ?? 0,
-        ),
-      ),
+      lists: rows.map((row) => {
+        const preview = previews.get(row.id) ?? {
+          previewItems: [],
+          itemCount: 0,
+        };
+        return toListDto(row, preview.previewItems, preview.itemCount);
+      }),
     });
   });
 
@@ -174,12 +175,14 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       id,
     );
 
-    const { previewItems, itemCount } = loadListPreview(db, id);
+    const previews = loadListPreviews(db, [id]);
+    const preview = previews.get(id) ?? { previewItems: [], itemCount: 0 };
+
     return reply.send(
       toListDto(
         { ...existing, name: parsed.data.name, updated_at: updatedAt },
-        previewItems,
-        itemCount,
+        preview.previewItems,
+        preview.itemCount,
       ),
     );
   });

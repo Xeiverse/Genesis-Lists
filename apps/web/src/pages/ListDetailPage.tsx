@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   AppBar,
@@ -16,7 +16,6 @@ import {
   ListItem,
   ListItemIcon,
   ListItemSecondaryAction,
-  ListItemText,
   Menu,
   MenuItem,
   Stack,
@@ -41,11 +40,15 @@ export function ListDetailPage() {
   const [newText, setNewText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editItem, setEditItem] = useState<ListItemDto | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const [nameInput, setNameInput] = useState("");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const skipBlurSave = useRef(false);
+  const skipTitleBlurSave = useRef(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -70,6 +73,20 @@ export function ListDetailPage() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (editingId) {
+      editInputRef.current?.focus();
+      editInputRef.current?.select();
+    }
+  }, [editingId]);
+
+  useEffect(() => {
+    if (editingTitle) {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }
+  }, [editingTitle]);
+
   async function addItem(e: FormEvent) {
     e.preventDefault();
     const text = newText.trim();
@@ -92,14 +109,85 @@ export function ListDetailPage() {
     }
   }
 
-  async function saveEdit() {
-    if (!editItem) return;
+  function startEdit(item: ListItemDto) {
+    skipBlurSave.current = false;
+    setEditingId(item.id);
+    setEditText(item.text);
+  }
+
+  function cancelEdit() {
+    skipBlurSave.current = true;
+    setEditingId(null);
+    setEditText("");
+  }
+
+  async function commitEdit() {
+    if (!editingId) return;
+    const item = items.find((i) => i.id === editingId);
+    const text = editText.trim();
+    if (!item || !text || text === item.text) {
+      setEditingId(null);
+      setEditText("");
+      return;
+    }
     try {
-      const updated = await api.updateItem(editItem.id, { text: editText.trim() });
+      const updated = await api.updateItem(editingId, { text });
       setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
-      setEditItem(null);
+      setEditingId(null);
+      setEditText("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Edit failed");
+    }
+  }
+
+  function onEditKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      skipBlurSave.current = true;
+      void commitEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelEdit();
+    }
+  }
+
+  function startTitleEdit() {
+    skipTitleBlurSave.current = false;
+    setTitleDraft(title);
+    setEditingTitle(true);
+  }
+
+  function cancelTitleEdit() {
+    skipTitleBlurSave.current = true;
+    setEditingTitle(false);
+    setTitleDraft("");
+  }
+
+  async function commitTitleEdit() {
+    const name = titleDraft.trim();
+    if (!name || name === title) {
+      setEditingTitle(false);
+      setTitleDraft("");
+      return;
+    }
+    try {
+      const updated = await api.renameList(id, name);
+      setTitle(updated.name);
+      setEditingTitle(false);
+      setTitleDraft("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Rename failed");
+    }
+  }
+
+  function onTitleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      skipTitleBlurSave.current = true;
+      void commitTitleEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelTitleEdit();
     }
   }
 
@@ -107,18 +195,12 @@ export function ListDetailPage() {
     try {
       await api.deleteItem(item.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
+      if (editingId === item.id) {
+        setEditingId(null);
+        setEditText("");
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
-    }
-  }
-
-  async function handleRename() {
-    try {
-      const updated = await api.renameList(id, nameInput.trim());
-      setTitle(updated.name);
-      setRenameOpen(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Rename failed");
     }
   }
 
@@ -138,9 +220,55 @@ export function ListDetailPage() {
           <IconButton edge="start" color="inherit" onClick={() => navigate("/")} aria-label="back">
             <ArrowBackIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }} noWrap>
-            {title}
-          </Typography>
+          {editingTitle ? (
+            <TextField
+              inputRef={titleInputRef}
+              size="small"
+              fullWidth
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onKeyDown={onTitleKeyDown}
+              onBlur={() => {
+                if (skipTitleBlurSave.current) {
+                  skipTitleBlurSave.current = false;
+                  return;
+                }
+                void commitTitleEdit();
+              }}
+              inputProps={{ "aria-label": "List name" }}
+              variant="standard"
+              sx={{
+                flexGrow: 1,
+                mr: 1,
+                "& .MuiInputBase-input": {
+                  color: "inherit",
+                  typography: "h6",
+                  py: 0.5,
+                },
+                "& .MuiInput-underline:before": { borderBottomColor: "rgba(255,255,255,0.42)" },
+                "& .MuiInput-underline:hover:before": { borderBottomColor: "rgba(255,255,255,0.7)" },
+                "& .MuiInput-underline:after": { borderBottomColor: "inherit" },
+              }}
+            />
+          ) : (
+            <Typography
+              variant="h6"
+              sx={{ flexGrow: 1, cursor: "pointer" }}
+              noWrap
+              onClick={startTitleEdit}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  startTitleEdit();
+                }
+              }}
+              aria-label="Edit list name"
+            >
+              {title}
+            </Typography>
+          )}
           <IconButton
             color="inherit"
             aria-label="list menu"
@@ -162,39 +290,78 @@ export function ListDetailPage() {
           </Typography>
         ) : (
           <List>
-            {items.map((item) => (
-              <ListItem key={item.id} disablePadding sx={{ pr: 6 }}>
-                <ListItemIcon sx={{ minWidth: 42 }}>
-                  <Checkbox
-                    edge="start"
-                    checked={item.checked}
-                    onChange={() => void toggle(item)}
-                    inputProps={{ "aria-label": `toggle ${item.text}` }}
+            {items.map((item) => {
+              const isEditing = editingId === item.id;
+              return (
+                <ListItem key={item.id} disablePadding sx={{ pr: 6, alignItems: "center", minHeight: 48 }}>
+                  <ListItemIcon sx={{ minWidth: 42 }}>
+                    <Checkbox
+                      edge="start"
+                      checked={item.checked}
+                      onChange={() => void toggle(item)}
+                      inputProps={{
+                        "aria-label": `toggle ${item.text}`,
+                      }}
+                    />
+                  </ListItemIcon>
+                  <TextField
+                    inputRef={isEditing ? editInputRef : undefined}
+                    variant="standard"
+                    fullWidth
+                    value={isEditing ? editText : item.text}
+                    onChange={(e) => {
+                      if (isEditing) setEditText(e.target.value);
+                    }}
+                    onClick={() => {
+                      if (!isEditing) startEdit(item);
+                    }}
+                    onFocus={() => {
+                      if (!isEditing) startEdit(item);
+                    }}
+                    onKeyDown={isEditing ? onEditKeyDown : undefined}
+                    onBlur={() => {
+                      if (!isEditing) return;
+                      if (skipBlurSave.current) {
+                        skipBlurSave.current = false;
+                        return;
+                      }
+                      void commitEdit();
+                    }}
+                    InputProps={{
+                      readOnly: !isEditing,
+                      disableUnderline: !isEditing,
+                    }}
+                    inputProps={{
+                      id: `item-text-${item.id}`,
+                      "aria-label": isEditing ? `Edit ${item.text}` : item.text,
+                    }}
+                    sx={{
+                      mr: 1,
+                      minHeight: 40,
+                      justifyContent: "center",
+                      "& .MuiInputBase-root": {
+                        minHeight: 40,
+                      },
+                      "& .MuiInputBase-input": {
+                        cursor: isEditing ? "text" : "pointer",
+                        py: 1,
+                        textDecoration: item.checked && !isEditing ? "line-through" : "none",
+                        opacity: item.checked && !isEditing ? 0.6 : 1,
+                      },
+                    }}
                   />
-                </ListItemIcon>
-                <ListItemText
-                  primary={item.text}
-                  onClick={() => {
-                    setEditItem(item);
-                    setEditText(item.text);
-                  }}
-                  sx={{
-                    textDecoration: item.checked ? "line-through" : "none",
-                    opacity: item.checked ? 0.6 : 1,
-                    cursor: "pointer",
-                  }}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    aria-label={`delete ${item.text}`}
-                    onClick={() => void removeItem(item)}
-                  >
-                    <DeleteOutlineIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-            ))}
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      aria-label={`delete ${item.text}`}
+                      onClick={() => void removeItem(item)}
+                    >
+                      <DeleteOutlineIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              );
+            })}
           </List>
         )}
       </Container>
@@ -230,8 +397,7 @@ export function ListDetailPage() {
         <MenuItem
           onClick={() => {
             setMenuAnchor(null);
-            setNameInput(title);
-            setRenameOpen(true);
+            startTitleEdit();
           }}
         >
           Rename list
@@ -245,50 +411,6 @@ export function ListDetailPage() {
           Delete list
         </MenuItem>
       </Menu>
-
-      <Dialog open={Boolean(editItem)} onClose={() => setEditItem(null)} fullWidth maxWidth="xs">
-        <DialogTitle>Edit item</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Text"
-            fullWidth
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button variant="text" onClick={() => setEditItem(null)}>
-            Cancel
-          </Button>
-          <Button onClick={() => void saveEdit()} disabled={!editText.trim()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={renameOpen} onClose={() => setRenameOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Rename list</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Name"
-            fullWidth
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button variant="text" onClick={() => setRenameOpen(false)}>
-            Cancel
-          </Button>
-          <Button onClick={() => void handleRename()} disabled={!nameInput.trim()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
         <DialogTitle>Delete list?</DialogTitle>

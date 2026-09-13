@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
+  Card,
+  CardActionArea,
+  CardContent,
   CircularProgress,
   Container,
   Dialog,
@@ -11,9 +15,9 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  InputAdornment,
   Menu,
   MenuItem,
-  Paper,
   Stack,
   TextField,
   Toolbar,
@@ -24,107 +28,10 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
+import SearchIcon from "@mui/icons-material/Search";
 import type { ListDto } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
-
-function ListTile({
-  list,
-  onOpen,
-  onMenuOpen,
-}: {
-  list: ListDto;
-  onOpen: () => void;
-  onMenuOpen: (e: MouseEvent<HTMLElement>) => void;
-}) {
-  const remaining = list.itemCount - list.previewItems.length;
-
-  return (
-    <Paper
-      elevation={0}
-      onClick={onOpen}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      sx={{
-        p: 2,
-        height: "100%",
-        cursor: "pointer",
-        border: 1,
-        borderColor: "divider",
-        borderRadius: 2,
-        display: "flex",
-        flexDirection: "column",
-        gap: 1,
-        transition: "background-color 0.15s ease",
-        "&:hover": { bgcolor: "action.hover" },
-        "&:focus-visible": { outline: 2, outlineColor: "primary.main", outlineOffset: 2 },
-      }}
-    >
-      <Stack direction="row" alignItems="flex-start" spacing={0.5}>
-        <Typography
-          variant="subtitle1"
-          fontWeight={600}
-          sx={{
-            flex: 1,
-            minWidth: 0,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {list.name}
-        </Typography>
-        <IconButton
-          size="small"
-          aria-label="list actions"
-          onClick={(e) => {
-            e.stopPropagation();
-            onMenuOpen(e);
-          }}
-          sx={{ mt: -0.5, mr: -0.5 }}
-        >
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
-      </Stack>
-
-      {list.previewItems.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No items yet
-        </Typography>
-      ) : (
-        <Stack spacing={0.25} sx={{ minHeight: 0 }}>
-          {list.previewItems.map((item) => (
-            <Typography
-              key={item.id}
-              variant="body2"
-              color="text.secondary"
-              sx={{
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                textDecoration: item.checked ? "line-through" : "none",
-                opacity: item.checked ? 0.65 : 1,
-              }}
-            >
-              {item.text}
-            </Typography>
-          ))}
-          {remaining > 0 && (
-            <Typography variant="caption" color="text.disabled">
-              +{remaining} more
-            </Typography>
-          )}
-        </Stack>
-      )}
-    </Paper>
-  );
-}
 
 export function ListsPage() {
   const { user, logout } = useAuth();
@@ -132,7 +39,9 @@ export function ListsPage() {
   const [lists, setLists] = useState<ListDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [accountAnchor, setAccountAnchor] = useState<null | HTMLElement>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -154,6 +63,16 @@ export function ListsPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const filteredLists = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return lists;
+    return lists.filter(
+      (list) =>
+        list.name.toLowerCase().includes(q) ||
+        list.previewItems.some((item) => item.text.toLowerCase().includes(q)),
+    );
+  }, [lists, query]);
 
   async function handleCreate() {
     try {
@@ -198,16 +117,46 @@ export function ListsPage() {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Genesis Lists
           </Typography>
-          <Typography variant="body2" sx={{ mr: 1, opacity: 0.9 }}>
-            {user?.username}
-          </Typography>
-          <Button color="inherit" onClick={() => void logout()}>
-            Log out
-          </Button>
+          <IconButton
+            color="inherit"
+            onClick={(e) => setAccountAnchor(e.currentTarget)}
+            aria-haspopup="menu"
+            aria-label={
+              user?.username ? `Account menu for ${user.username}` : "Account menu"
+            }
+          >
+            <Avatar
+              sx={{
+                width: 32,
+                height: 32,
+                bgcolor: "primary.dark",
+                fontSize: "0.875rem",
+              }}
+            >
+              {(user?.username?.[0] ?? "?").toUpperCase()}
+            </Avatar>
+          </IconButton>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="md" sx={{ py: 2, pb: 10 }}>
+      <Container maxWidth={false} sx={{ py: 2, pb: 10, maxWidth: 960 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search lists"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search lists"
+          sx={{ mb: 2 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
+
         {loading ? (
           <Stack alignItems="center" py={6}>
             <CircularProgress />
@@ -227,40 +176,123 @@ export function ListsPage() {
               New list
             </Button>
           </Stack>
+        ) : filteredLists.length === 0 ? (
+          <Stack spacing={1} alignItems="center" py={8}>
+            <Typography variant="h6">No matching lists</Typography>
+            <Typography color="text.secondary" textAlign="center">
+              Try a different search term.
+            </Typography>
+          </Stack>
         ) : (
           <Box
             sx={{
-              display: "grid",
-              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
-              gap: 2,
+              columnCount: { xs: 1, sm: 2, md: 3 },
+              columnGap: 2,
             }}
           >
-            {lists.map((list) => (
-              <ListTile
+            {filteredLists.map((list) => (
+              <Card
                 key={list.id}
-                list={list}
-                onOpen={() => navigate(`/lists/${list.id}`)}
-                onMenuOpen={(e) => {
-                  setActive(list);
-                  setMenuAnchor(e.currentTarget);
+                variant="outlined"
+                sx={{
+                  mb: 2,
+                  breakInside: "avoid",
+                  display: "inline-block",
+                  width: "100%",
+                  verticalAlign: "top",
                 }}
-              />
+              >
+                <Box sx={{ position: "relative" }}>
+                  <IconButton
+                    size="small"
+                    aria-label="list actions"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActive(list);
+                      setMenuAnchor(e.currentTarget);
+                    }}
+                    sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                  <CardActionArea onClick={() => navigate(`/lists/${list.id}`)}>
+                    <CardContent sx={{ pr: 5 }}>
+                      <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                        {list.name}
+                      </Typography>
+                      {list.previewItems.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          Empty list
+                        </Typography>
+                      ) : (
+                        <Stack spacing={0.25}>
+                          {list.previewItems.map((item) => (
+                            <Typography
+                              key={item.id}
+                              variant="body2"
+                              sx={{
+                                textDecoration: item.checked ? "line-through" : "none",
+                                opacity: item.checked ? 0.6 : 1,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.text}
+                            </Typography>
+                          ))}
+                          {list.itemCount > list.previewItems.length && (
+                            <Typography variant="caption" color="text.secondary">
+                              +{list.itemCount - list.previewItems.length} more
+                            </Typography>
+                          )}
+                        </Stack>
+                      )}
+                    </CardContent>
+                  </CardActionArea>
+                </Box>
+              </Card>
             ))}
           </Box>
         )}
       </Container>
 
       <Fab
+        variant="extended"
         color="primary"
-        aria-label="create list"
+        aria-label="New list"
         sx={{ position: "fixed", bottom: 24, right: 24 }}
         onClick={() => {
           setNameInput("");
           setCreateOpen(true);
         }}
       >
-        <AddIcon />
+        <AddIcon sx={{ mr: 1 }} />
+        New list
       </Fab>
+
+      <Menu
+        anchorEl={accountAnchor}
+        open={Boolean(accountAnchor)}
+        onClose={() => setAccountAnchor(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            setAccountAnchor(null);
+            navigate("/settings");
+          }}
+        >
+          Settings
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setAccountAnchor(null);
+            void logout();
+          }}
+        >
+          Log out
+        </MenuItem>
+      </Menu>
 
       <Menu
         anchorEl={menuAnchor}

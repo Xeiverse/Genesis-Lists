@@ -8,9 +8,9 @@ All endpoints are under `/api`.
 
 ## Authentication
 
-- **Mechanism:** HTTP-only session cookie (`genesis_session` unless configured otherwise).
+- **Mechanism:** HTTP-only session cookie (`genesis_session` unless configured otherwise). The cookie is **signed** with `SESSION_SECRET`, `SameSite=Lax`, and `Secure` when `COOKIE_SECURE=true` (or production default). The cookie value is a random session id stored in SQLite.
 - **Register / login** set the cookie on success.
-- **Logout** clears the cookie.
+- **Logout** clears the cookie and deletes the server-side session.
 - Protected routes require a valid session; otherwise `401` with error code `UNAUTHORIZED`.
 
 ## Error shape
@@ -36,12 +36,13 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `INTE
 | POST | `/api/auth/login` | No | Create session |
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/auth/me` | Yes | Current user |
+| POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }` |
 
 ### Lists
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` up to 5 and `itemCount`) |
+| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` up to 8 and `itemCount`) |
 | POST | `/api/lists` | Yes | Create list `{ "name": "..." }` |
 | PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` |
 | DELETE | `/api/lists/{id}` | Yes | Delete list + items |

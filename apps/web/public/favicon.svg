@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Genesis Lists application icon.
-  Glyph: Material Symbols "receipt_long" (Receipt Long), Google.
+  Glyph: Material Symbols "receipt_long" (Receipt Long), Copyright Google.
   Licensed under the Apache License, Version 2.0.
   https://github.com/google/material-design-icons
+  Modified: the published path is filled white, scaled, and placed on a
+  rounded #386a20 tile. It was not redrawn.
+  License and notice: licenses/material-symbols/ next to this file.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 960" role="img" aria-label="Genesis Lists">
   <rect width="960" height="960" rx="212" fill="#386a20"/>

@@ -8,7 +8,7 @@
 
 ## Application icon
 
-The product mark is Material Symbols **Receipt Long** (`receipt_long`): the published glyph (not a redraw) in white on the primary green tile (`#386a20`), with about 22% corner radius and padding so the glyph stays in the maskable safe zone. The glyph is Apache License 2.0 ([Material Symbols](https://github.com/google/material-design-icons)).
+The product mark is Material Symbols **Receipt Long** (`receipt_long`): the published glyph (not a redraw) in white on the primary green tile (`#386a20`), with about 22% corner radius and padding so the glyph stays in the maskable safe zone. The glyph is Apache License 2.0. A copy of that license and the modification notice are in [`apps/web/public/licenses/material-symbols/`](../apps/web/public/licenses/material-symbols/NOTICE).
 
 Assets live in `apps/web/public/` and are copied into the SPA build:
 

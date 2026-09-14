@@ -48,7 +48,9 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 - Top app bar: inverted product mark, product name “Genesis Lists”, circular avatar with username initial opening a menu (Settings, Log out). List detail and Settings do not repeat the mark.
 - Search field below the app bar: filters lists by name or preview item text (client-side).
 - Body: Keep-style multi-column masonry of list cards (1 / 2 / 3 columns by breakpoint). Card heights vary with preview content; cards do not stretch to match neighbors in a row.
-- Each card: list name, up to 8 preview item lines (checked items struck through), optional “+N more”, overflow (rename/delete).
+- Each card: list name; when `isOwner` is false, a short “Shared by {ownerUsername}” line; up to 8 preview item lines (checked items struck through); optional “+N more”; overflow menu.
+- Overflow (owner): Rename, Share, Delete.
+- Overflow (member): Rename, Leave list (confirm).
 - Empty state: short copy + CTA to create first list.
 - No matches for search: distinct “No matching lists” empty state.
 - Primary create action: FAB “New list”.
@@ -57,13 +59,24 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 
 ### 4. List detail
 
-- App bar: back, list title (tap to **inline** rename; Enter/blur save, Escape cancel), overflow (rename starts inline edit; delete list).
+- App bar: back, list title (tap to **inline** rename; Enter/blur save, Escape cancel), overflow.
+- Overflow (owner): Rename (starts inline edit), Share, Delete list.
+- Overflow (member): Rename (starts inline edit), Leave list (confirm). No Delete.
 - Open checklist: unticked items only, ordered by `position`. Each row = checkbox + text field; tap checkbox toggles; tap/focus text to edit **inline** without layout shift (Enter/blur save, Escape cancel).
 - Ticked section (Google Keep style): ticked items render only here, at the bottom, strikethrough and reduced opacity, also ordered by `position`. Header is a collapse control (`aria-expanded`) showing the count (e.g. “2 ticked”). Collapsed by default; collapse state is client-only and not persisted. Ticking an item does not force-expand. Hidden when nothing is ticked. Unticking restores the item among open items by `position` without rewriting positions. Inline edit and trailing delete work the same as the open checklist.
 - Clear: a button on the ticked header (visible only when there are ticked items) opens a confirm dialog, then deletes every ticked item. Unticked items are untouched.
 - Delete item via trailing icon.
 - Sticky/bottom add row: text field + add button.
 - Empty state (“No items yet”) only when the list has zero items. A fully ticked list still shows the ticked section.
+
+### 4b. Share dialog (owner)
+
+- Opened from Share on home card menu or list detail overflow.
+- Dialog (`fullWidth`, `maxWidth="sm"`): title “Share list”, search field (filter usernames client-side), scrollable list of users.
+- Each row: avatar (username initial), username, checkbox. Owner appears at the top as read-only (checked, disabled) labeled as owner — not included in `userIds`.
+- Other users: tick = include in member set. Initial ticks match current members from `GET /api/lists/{id}/members`.
+- Save calls `PUT /api/lists/{id}/members` with the ticked non-owner user ids (full replace). Cancel discards local checkbox state.
+- Errors via snackbar.
 
 ### 5. Settings
 

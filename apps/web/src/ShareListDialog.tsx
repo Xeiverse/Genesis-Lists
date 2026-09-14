@@ -21,7 +21,7 @@ import {
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import type { UserDto } from "@genesis-lists/shared";
-import { api, ApiError } from "../api";
+import { api, ApiError } from "./api";
 
 type ShareListDialogProps = {
   open: boolean;

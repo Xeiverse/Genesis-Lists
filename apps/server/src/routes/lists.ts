@@ -3,27 +3,65 @@ import {
   PREVIEW_ITEM_LIMIT,
   createItemSchema,
   createListSchema,
+  putListMembersSchema,
   updateItemSchema,
   updateListSchema,
   type ListDto,
   type ListItemDto,
   type ListItemPreviewDto,
+  type ListMemberDto,
 } from "@genesis-lists/shared";
 import type { Db, ItemRow, ListRow } from "../db/index.js";
 import { nowIso, requireUser, sendError, uuid } from "../util.js";
 
+type ListAccess = "owner" | "member" | "none";
+
+type ListWithOwner = ListRow & { owner_username: string };
+
+function getListAccess(db: Db, listId: string, userId: string): ListAccess {
+  const list = db
+    .prepare(`SELECT owner_id FROM lists WHERE id = ?`)
+    .get(listId) as { owner_id: string } | undefined;
+  if (!list) return "none";
+  if (list.owner_id === userId) return "owner";
+  const member = db
+    .prepare(`SELECT 1 AS ok FROM list_members WHERE list_id = ? AND user_id = ?`)
+    .get(listId, userId);
+  return member ? "member" : "none";
+}
+
+function loadListWithOwner(
+  db: Db,
+  listId: string,
+): ListWithOwner | undefined {
+  return db
+    .prepare(
+      `SELECT l.*, u.username AS owner_username
+       FROM lists l
+       INNER JOIN users u ON u.id = l.owner_id
+       WHERE l.id = ?`,
+    )
+    .get(listId) as ListWithOwner | undefined;
+}
+
 function toListDto(
   row: ListRow,
-  previewItems: ListItemPreviewDto[] = [],
-  itemCount = 0,
+  opts: {
+    previewItems?: ListItemPreviewDto[];
+    itemCount?: number;
+    isOwner: boolean;
+    ownerUsername: string;
+  },
 ): ListDto {
   return {
     id: row.id,
     name: row.name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    previewItems,
-    itemCount,
+    previewItems: opts.previewItems ?? [],
+    itemCount: opts.itemCount ?? 0,
+    isOwner: opts.isOwner,
+    ownerUsername: opts.ownerUsername,
   };
 }
 
@@ -99,14 +137,73 @@ function toItemDto(row: ItemRow): ListItemDto {
   };
 }
 
+function loadMembers(db: Db, listId: string): ListMemberDto[] {
+  const rows = db
+    .prepare(
+      `SELECT m.user_id AS user_id, u.username AS username
+       FROM list_members m
+       INNER JOIN users u ON u.id = m.user_id
+       WHERE m.list_id = ?
+       ORDER BY u.username ASC`,
+    )
+    .all(listId) as Array<{ user_id: string; username: string }>;
+  return rows.map((r) => ({ userId: r.user_id, username: r.username }));
+}
+
+function userCanAccessItem(
+  db: Db,
+  itemId: string,
+  userId: string,
+): ItemRow | undefined {
+  const row = db
+    .prepare(
+      `SELECT i.*
+       FROM list_items i
+       INNER JOIN lists l ON l.id = i.list_id
+       WHERE i.id = ?
+         AND (
+           l.owner_id = ?
+           OR EXISTS (
+             SELECT 1 FROM list_members m
+             WHERE m.list_id = l.id AND m.user_id = ?
+           )
+         )`,
+    )
+    .get(itemId, userId, userId) as ItemRow | undefined;
+  return row;
+}
+
 export async function registerListRoutes(app: FastifyInstance, db: Db) {
+  app.get("/api/users", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const rows = db
+      .prepare(`SELECT id, username FROM users ORDER BY username ASC`)
+      .all() as Array<{ id: string; username: string }>;
+
+    return reply.send({
+      users: rows.map((r) => ({ id: r.id, username: r.username })),
+    });
+  });
+
   app.get("/api/lists", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
 
     const rows = db
-      .prepare(`SELECT * FROM lists WHERE owner_id = ? ORDER BY created_at ASC`)
-      .all(user.id) as ListRow[];
+      .prepare(
+        `SELECT l.*, u.username AS owner_username
+         FROM lists l
+         INNER JOIN users u ON u.id = l.owner_id
+         WHERE l.owner_id = ?
+            OR EXISTS (
+              SELECT 1 FROM list_members m
+              WHERE m.list_id = l.id AND m.user_id = ?
+            )
+         ORDER BY l.created_at ASC`,
+      )
+      .all(user.id, user.id) as ListWithOwner[];
 
     const previews = loadListPreviews(
       db,
@@ -119,7 +216,12 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
           previewItems: [],
           itemCount: 0,
         };
-        return toListDto(row, preview.previewItems, preview.itemCount);
+        return toListDto(row, {
+          previewItems: preview.previewItems,
+          itemCount: preview.itemCount,
+          isOwner: row.owner_id === user.id,
+          ownerUsername: row.owner_username,
+        });
       }),
     });
   });
@@ -140,13 +242,16 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     ).run(id, user.id, parsed.data.name, ts, ts);
 
     return reply.status(201).send(
-      toListDto({
-        id,
-        owner_id: user.id,
-        name: parsed.data.name,
-        created_at: ts,
-        updated_at: ts,
-      }),
+      toListDto(
+        {
+          id,
+          owner_id: user.id,
+          name: parsed.data.name,
+          created_at: ts,
+          updated_at: ts,
+        },
+        { isOwner: true, ownerUsername: user.username },
+      ),
     );
   });
 
@@ -160,10 +265,12 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
-    const existing = db
-      .prepare(`SELECT * FROM lists WHERE id = ? AND owner_id = ?`)
-      .get(id, user.id) as ListRow | undefined;
+    const access = getListAccess(db, id, user.id);
+    if (access === "none") {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
 
+    const existing = loadListWithOwner(db, id);
     if (!existing) {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
@@ -181,8 +288,12 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     return reply.send(
       toListDto(
         { ...existing, name: parsed.data.name, updated_at: updatedAt },
-        preview.previewItems,
-        preview.itemCount,
+        {
+          previewItems: preview.previewItems,
+          itemCount: preview.itemCount,
+          isOwner: access === "owner",
+          ownerUsername: existing.owner_username,
+        },
       ),
     );
   });
@@ -192,15 +303,130 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const existing = db
-      .prepare(`SELECT id FROM lists WHERE id = ? AND owner_id = ?`)
-      .get(id, user.id);
-
-    if (!existing) {
+    const access = getListAccess(db, id, user.id);
+    if (access === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+    if (access !== "owner") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "Only the list owner can perform this action",
+      );
     }
 
     db.prepare(`DELETE FROM lists WHERE id = ?`).run(id);
+    return reply.status(204).send();
+  });
+
+  app.get("/api/lists/:id/members", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const access = getListAccess(db, id, user.id);
+    if (access === "none") {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+    if (access !== "owner") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "Only the list owner can perform this action",
+      );
+    }
+
+    return reply.send({ members: loadMembers(db, id) });
+  });
+
+  app.put("/api/lists/:id/members", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const parsed = putListMembersSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
+    }
+
+    const access = getListAccess(db, id, user.id);
+    if (access === "none") {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+    if (access !== "owner") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "Only the list owner can perform this action",
+      );
+    }
+
+    const list = db
+      .prepare(`SELECT owner_id FROM lists WHERE id = ?`)
+      .get(id) as { owner_id: string };
+
+    const uniqueIds = [...new Set(parsed.data.userIds)];
+    if (uniqueIds.includes(list.owner_id)) {
+      return sendError(
+        reply,
+        400,
+        "VALIDATION_ERROR",
+        "Cannot add the list owner as a member",
+      );
+    }
+
+    for (const userId of uniqueIds) {
+      const exists = db
+        .prepare(`SELECT id FROM users WHERE id = ?`)
+        .get(userId);
+      if (!exists) {
+        return sendError(reply, 400, "VALIDATION_ERROR", "Unknown user id");
+      }
+    }
+
+    const ts = nowIso();
+    db.exec("BEGIN");
+    try {
+      db.prepare(`DELETE FROM list_members WHERE list_id = ?`).run(id);
+      const insert = db.prepare(
+        `INSERT INTO list_members (list_id, user_id, role, created_at) VALUES (?, ?, 'member', ?)`,
+      );
+      for (const userId of uniqueIds) {
+        insert.run(id, userId, ts);
+      }
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+
+    return reply.send({ members: loadMembers(db, id) });
+  });
+
+  app.delete("/api/lists/:id/members/me", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const access = getListAccess(db, id, user.id);
+    if (access === "none") {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+    if (access === "owner") {
+      return sendError(
+        reply,
+        400,
+        "VALIDATION_ERROR",
+        "List owners cannot leave; delete the list instead",
+      );
+    }
+
+    db.prepare(
+      `DELETE FROM list_members WHERE list_id = ? AND user_id = ?`,
+    ).run(id, user.id);
     return reply.status(204).send();
   });
 
@@ -209,11 +435,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const list = db
-      .prepare(`SELECT id FROM lists WHERE id = ? AND owner_id = ?`)
-      .get(id, user.id);
-
-    if (!list) {
+    if (getListAccess(db, id, user.id) === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 
@@ -236,11 +458,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
-    const list = db
-      .prepare(`SELECT id FROM lists WHERE id = ? AND owner_id = ?`)
-      .get(listId, user.id);
-
-    if (!list) {
+    if (getListAccess(db, listId, user.id) === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 
@@ -274,11 +492,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const list = db
-      .prepare(`SELECT id FROM lists WHERE id = ? AND owner_id = ?`)
-      .get(id, user.id);
-
-    if (!list) {
+    if (getListAccess(db, id, user.id) === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 
@@ -296,16 +510,8 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
-    const row = db
-      .prepare(
-        `SELECT i.*, l.owner_id AS owner_id
-         FROM list_items i
-         INNER JOIN lists l ON l.id = i.list_id
-         WHERE i.id = ?`,
-      )
-      .get(id) as (ItemRow & { owner_id: string }) | undefined;
-
-    if (!row || row.owner_id !== user.id) {
+    const row = userCanAccessItem(db, id, user.id);
+    if (!row) {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 
@@ -341,16 +547,8 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const row = db
-      .prepare(
-        `SELECT i.id AS id, l.owner_id AS owner_id
-         FROM list_items i
-         INNER JOIN lists l ON l.id = i.list_id
-         WHERE i.id = ?`,
-      )
-      .get(id) as { id: string; owner_id: string } | undefined;
-
-    if (!row || row.owner_id !== user.id) {
+    const row = userCanAccessItem(db, id, user.id);
+    if (!row) {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 

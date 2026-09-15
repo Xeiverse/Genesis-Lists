@@ -33,20 +33,31 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 | ID | User story | Acceptance criteria |
 |----|------------|---------------------|
 | REQ-LIST-01 | As a user, I can create multiple named lists | Creating a list with a non-empty name succeeds; list appears in my list of lists |
-| REQ-LIST-02 | As a user, I can rename a list I own | New name persists; other users’ lists are unaffected |
-| REQ-LIST-03 | As a user, I can delete a list I own | List and its items are removed; I no longer see it |
-| REQ-LIST-04 | As a user, I only see my own lists | Another user’s lists never appear in my `GET /api/lists` |
+| REQ-LIST-02 | As a user, I can rename a list I own or am a member of | New name persists; users without access are unaffected |
+| REQ-LIST-03 | As an owner, I can delete a list I own | List and its items are removed; I no longer see it. Members cannot delete (`403 FORBIDDEN`) |
+| REQ-LIST-04 | As a user, I only see lists I own or am a member of | Another user’s private lists never appear in my `GET /api/lists` |
 
 ### Items
 
 | ID | User story | Acceptance criteria |
 |----|------------|---------------------|
-| REQ-ITEM-01 | As a user, I can add items to a list I own | Item text is stored and returned in list order |
+| REQ-ITEM-01 | As a user, I can add items to a list I can access | Item text is stored and returned in list order |
 | REQ-ITEM-02 | As a user, I can edit an item’s text | Updated text persists |
 | REQ-ITEM-03 | As a user, I can toggle an item checked/unchecked | `checked` flips and persists (shopping “got it” behavior) |
 | REQ-ITEM-04 | As a user, I can delete an item | Item is removed from the list |
-| REQ-ITEM-05 | As a user, I cannot mutate another user’s items | Access to foreign list/item returns 404 (no existence leak) |
-| REQ-ITEM-06 | As a user, ticked items collect in a collapsible section, and I can clear them | Ticking an item moves it into a bottom ticked section that can be collapsed; unticking restores it among open items by `position` (positions are not rewritten). A confirmed clear deletes only ticked items on a list I own. Clearing another user’s list, or a missing list, returns 404 (no existence leak). Clear is idempotent when nothing is ticked (`204`) |
+| REQ-ITEM-05 | As a user, I cannot mutate lists/items I cannot access | Access without ownership or membership returns 404 (no existence leak) |
+| REQ-ITEM-06 | As a user, ticked items collect in a collapsible section, and I can clear them | Ticking an item moves it into a bottom ticked section that can be collapsed; unticking restores it among open items by `position` (positions are not rewritten). A confirmed clear deletes only ticked items on a list I can access. Clearing a list I cannot access, or a missing list, returns 404 (no existence leak). Clear is idempotent when nothing is ticked (`204`) |
+
+### Sharing
+
+| ID | User story | Acceptance criteria |
+|----|------------|---------------------|
+| REQ-SHARE-01 | As an owner, I can share a list with other users on the instance | Share dialog lists users; I can search and tick who should have access; Save replaces the member set. Members appear on `GET /api/lists` for those users with `isOwner: false` |
+| REQ-SHARE-02 | As a member, I can read and write a shared list | I can view items, add/edit/toggle/delete items, clear ticked items, and rename the list |
+| REQ-SHARE-03 | As a member, I cannot delete the list or manage members | `DELETE /api/lists/{id}` and member management return `403 FORBIDDEN` |
+| REQ-SHARE-04 | As an owner, I can revoke access | Unticking a user and saving removes them; they no longer see the list (`404` on direct access) |
+| REQ-SHARE-05 | As a member, I can leave a shared list | `DELETE /api/lists/{id}/members/me` removes my membership; the list disappears from my home. Owners cannot leave (`400`) |
+| REQ-SHARE-06 | As a signed-in user, I can list other users for sharing | `GET /api/users` returns `{ id, username }` for all accounts (self-host directory) |
 
 ### Client & ops
 
@@ -56,9 +67,10 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 | REQ-OPS-01 | As a self-hoster, I can run the stack with Docker Compose | Documented compose up serves UI + API; data persists in a volume |
 | REQ-OPS-02 | As a self-hoster, I can tell which version is running and whether the database is reachable | `GET /api/health` returns `{ status: "ok", version, schemaVersion }` after a successful `SELECT 1`. If the database cannot be queried, the response is `503` with `{ status: "error", version }` |
 
-## Out of scope (this release)
+## Out of scope
 
-- Shared lists, invites, roles
+- Viewer / editor role picker (single fixed `member` capability for now)
+- Email/link invites
 - Email verification, password reset (email-based)
 - Authenticated password change remains in scope for users with a local password (REQ-AUTH-05)
 - Item quantities, categories, stores

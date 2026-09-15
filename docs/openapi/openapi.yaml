@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     REST API for Genesis Lists. Session cookie authentication with optional OIDC.
-    Spec is the source of truth — see docs/04-api.md.
+    Includes shared lists (members). Spec is the source of truth — see docs/04-api.md.
 servers:
   - url: /
 paths:
@@ -23,7 +23,7 @@ paths:
               example:
                 status: ok
                 version: "1.0.0"
-                schemaVersion: 2
+                schemaVersion: 3
         '503':
           description: Database unavailable
           content:
@@ -255,11 +255,38 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenError'
 
+  /api/users:
+    get:
+      operationId: listUsers
+      summary: List all users on the instance
+      description: >
+        Self-host directory for the share picker. Returns id and username for every account.
+        Signed-in users can see all usernames on the instance.
+      tags: [Users]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users]
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /api/lists:
     get:
       operationId: listLists
-      summary: List lists owned by the current user
-      description: Each list includes itemCount and up to 8 previewItems (by position) for homepage cards.
+      summary: List lists owned by or shared with the current user
+      description: >
+        Each list includes itemCount, up to 8 previewItems (by position), isOwner, and ownerUsername.
       tags: [Lists]
       security:
         - sessionCookie: []
@@ -308,6 +335,7 @@ paths:
     patch:
       operationId: updateList
       summary: Rename a list
+      description: Owner or member may rename. Users without access receive 404.
       tags: [Lists]
       security:
         - sessionCookie: []
@@ -333,12 +361,104 @@ paths:
     delete:
       operationId: deleteList
       summary: Delete a list and its items
+      description: Owner only. Members receive 403 FORBIDDEN. Users without access receive 404.
       tags: [Lists]
       security:
         - sessionCookie: []
       responses:
         '204':
           description: Deleted
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/lists/{id}/members:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    get:
+      operationId: listMembers
+      summary: List members of a list
+      description: Owner only. Does not include the owner. Members receive 403; no access → 404.
+      tags: [Members]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ListMember'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    put:
+      operationId: putMembers
+      summary: Replace the member set for a list
+      description: >
+        Owner only. Body userIds is the complete desired member set (Immich-style save).
+        Empty array clears all members. Rejects the owner id or unknown user ids (400).
+        Members receive 403; no access → 404.
+      tags: [Members]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutMembersRequest'
+      responses:
+        '200':
+          description: Updated member set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ListMember'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /api/lists/{id}/members/me:
+    parameters:
+      - $ref: '#/components/parameters/ListId'
+    delete:
+      operationId: leaveList
+      summary: Leave a shared list
+      description: >
+        Removes the current user from list_members. Members only.
+        Owners receive 400. Non-members or users without access receive 404.
+      tags: [Members]
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Left the list
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
@@ -404,8 +524,8 @@ paths:
       summary: Delete every ticked item on a list
       description: >
         Deletes items where checked is true. Unticked items are left in place.
-        Idempotent: 204 when the list is owned even if nothing is ticked.
-        404 if the list is missing or not owned (no existence leak).
+        Idempotent: 204 when the list is accessible (owner or member) even if nothing is ticked.
+        404 if the list is missing or not accessible (no existence leak).
       tags: [Items]
       security:
         - sessionCookie: []
@@ -496,7 +616,7 @@ components:
         schemaVersion:
           type: integer
           minimum: 1
-          example: 1
+          example: 3
 
     HealthErrorResponse:
       type: object
@@ -620,7 +740,15 @@ components:
 
     List:
       type: object
-      required: [id, name, createdAt, updatedAt, previewItems, itemCount]
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+        - previewItems
+        - itemCount
+        - isOwner
+        - ownerUsername
       properties:
         id:
           type: string
@@ -646,6 +774,33 @@ components:
           description: >
             Total items in the list; used with previewItems for "+N more".
             Populated on GET /api/lists and PATCH /api/lists/{id}; 0 on create.
+        isOwner:
+          type: boolean
+          description: True when the authenticated user owns the list.
+        ownerUsername:
+          type: string
+          description: Username of the list owner.
+
+    ListMember:
+      type: object
+      required: [userId, username]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        username:
+          type: string
+
+    PutMembersRequest:
+      type: object
+      required: [userIds]
+      properties:
+        userIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Complete desired member set (replaces previous members).
 
     CreateListRequest:
       type: object
@@ -753,7 +908,9 @@ components:
               code: CONFLICT
               message: Username already taken
     ForbiddenError:
-      description: Authenticated or policy refusal (for example registration closed)
+      description: >
+        Authenticated or policy refusal (registration closed, or access without capability
+        such as a member deleting a list).
       content:
         application/json:
           schema:
@@ -761,4 +918,4 @@ components:
           example:
             error:
               code: FORBIDDEN
-              message: Registration is closed
+              message: Only the list owner can perform this action

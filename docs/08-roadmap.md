@@ -4,10 +4,13 @@ Specs first for each item—extend docs and OpenAPI before implementation.
 
 ## Shared / collaborative lists
 
-- Add `list_members(list_id, user_id, role)` with roles e.g. `editor`, `viewer`.
-- Invite by username (later: email/link).
-- Authorization: owner or member may read/write per role.
-- Optional: realtime updates (SSE/WebSocket).
+**Delivered (this slice):** `list_members` with a single fixed `member` capability (read/write/rename, not delete); owner-managed Immich-style user picker; member leave; user directory for self-host.
+
+**Still planned:**
+
+- Distinct `editor` / `viewer` roles (role picker in the share dialog).
+- Invite by email or link (not only ticking existing accounts).
+- Optional realtime updates (SSE/WebSocket).
 
 ## Third-party authentication (Authentik / OIDC)
 

@@ -52,7 +52,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), {
       status: "ok",
       version: "1.0.0",
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
   });
 
@@ -193,6 +193,8 @@ describe("Genesis Lists API contract", async () => {
     listId = create.json().id;
     assert.deepEqual(create.json().previewItems, []);
     assert.equal(create.json().itemCount, 0);
+    assert.equal(create.json().isOwner, true);
+    assert.equal(create.json().ownerUsername, "alice");
 
     const list = await app.inject({
       method: "GET",
@@ -204,6 +206,8 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(list.json().lists[0].name, "Groceries");
     assert.deepEqual(list.json().lists[0].previewItems, []);
     assert.equal(list.json().lists[0].itemCount, 0);
+    assert.equal(list.json().lists[0].isOwner, true);
+    assert.equal(list.json().lists[0].ownerUsername, "alice");
   });
 
   await it("bob cannot see alice lists", async () => {
@@ -866,5 +870,316 @@ describe("OIDC auth", async () => {
         assert.equal(callback.headers.location, "/login?error=oidc");
       },
     );
+  });
+});
+
+describe("shared lists", async () => {
+  let app: FastifyInstance;
+  let dbPath: string;
+  let cookieAlice = "";
+  let cookieBob = "";
+  let cookieCarol = "";
+  let aliceId = "";
+  let bobId = "";
+  let carolId = "";
+  let sharedListId = "";
+  let sharedItemId = "";
+
+  before(async () => {
+    dbPath = path.join(os.tmpdir(), `genesis-share-${Date.now()}.db`);
+    app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret",
+      cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
+    });
+    await app.ready();
+
+    const alice = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "alice", password: "password1" },
+    });
+    cookieAlice = getCookie(alice)!;
+    aliceId = alice.json().id;
+
+    const bob = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "bob", password: "password1" },
+    });
+    cookieBob = getCookie(bob)!;
+    bobId = bob.json().id;
+
+    const carol = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { username: "carol", password: "password1" },
+    });
+    cookieCarol = getCookie(carol)!;
+    carolId = carol.json().id;
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      headers: { cookie: cookieAlice },
+      payload: { name: "Household" },
+    });
+    sharedListId = created.json().id;
+  });
+
+  after(async () => {
+    await app.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      const p = dbPath + suffix;
+      try {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  await it("GET /api/users lists the directory", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { cookie: cookieAlice },
+    });
+    assert.equal(res.statusCode, 200);
+    const users = res.json().users as Array<{ id: string; username: string }>;
+    assert.equal(users.length, 3);
+    assert.deepEqual(
+      users.map((u) => u.username).sort(),
+      ["alice", "bob", "carol"],
+    );
+    assert.ok(users.some((u) => u.id === aliceId));
+    assert.ok(users.some((u) => u.id === bobId));
+    assert.ok(users.some((u) => u.id === carolId));
+  });
+
+  await it("owner can put members; bob sees shared list", async () => {
+    const put = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: [bobId] },
+    });
+    assert.equal(put.statusCode, 200);
+    assert.equal(put.json().members.length, 1);
+    assert.equal(put.json().members[0].userId, bobId);
+    assert.equal(put.json().members[0].username, "bob");
+
+    const get = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+    });
+    assert.equal(get.statusCode, 200);
+    assert.equal(get.json().members.length, 1);
+
+    const bobLists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(bobLists.statusCode, 200);
+    assert.equal(bobLists.json().lists.length, 1);
+    assert.equal(bobLists.json().lists[0].id, sharedListId);
+    assert.equal(bobLists.json().lists[0].isOwner, false);
+    assert.equal(bobLists.json().lists[0].ownerUsername, "alice");
+
+    const carolLists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieCarol },
+    });
+    assert.equal(carolLists.json().lists.length, 0);
+  });
+
+  await it("member can read write rename and clear; cannot delete or manage members", async () => {
+    const add = await app.inject({
+      method: "POST",
+      url: `/api/lists/${sharedListId}/items`,
+      headers: { cookie: cookieBob },
+      payload: { text: "Milk" },
+    });
+    assert.equal(add.statusCode, 201);
+    sharedItemId = add.json().id;
+
+    const rename = await app.inject({
+      method: "PATCH",
+      url: `/api/lists/${sharedListId}`,
+      headers: { cookie: cookieBob },
+      payload: { name: "Household shop" },
+    });
+    assert.equal(rename.statusCode, 200);
+    assert.equal(rename.json().name, "Household shop");
+    assert.equal(rename.json().isOwner, false);
+    assert.equal(rename.json().ownerUsername, "alice");
+
+    const tick = await app.inject({
+      method: "PATCH",
+      url: `/api/items/${sharedItemId}`,
+      headers: { cookie: cookieBob },
+      payload: { checked: true },
+    });
+    assert.equal(tick.statusCode, 200);
+
+    const clear = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${sharedListId}/items/checked`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(clear.statusCode, 204);
+
+    const add2 = await app.inject({
+      method: "POST",
+      url: `/api/lists/${sharedListId}/items`,
+      headers: { cookie: cookieBob },
+      payload: { text: "Bread" },
+    });
+    assert.equal(add2.statusCode, 201);
+    sharedItemId = add2.json().id;
+
+    const delItem = await app.inject({
+      method: "DELETE",
+      url: `/api/items/${sharedItemId}`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(delItem.statusCode, 204);
+
+    const delList = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${sharedListId}`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(delList.statusCode, 403);
+    assert.equal(delList.json().error.code, "FORBIDDEN");
+
+    const getMembers = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(getMembers.statusCode, 403);
+
+    const putMembers = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieBob },
+      payload: { userIds: [carolId] },
+    });
+    assert.equal(putMembers.statusCode, 403);
+  });
+
+  await it("carol still gets 404; put rejects owner and unknown ids", async () => {
+    const items = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedListId}/items`,
+      headers: { cookie: cookieCarol },
+    });
+    assert.equal(items.statusCode, 404);
+
+    const invalidAsStranger = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieCarol },
+      payload: { userIds: "not-an-array" },
+    });
+    assert.equal(invalidAsStranger.statusCode, 404);
+    assert.equal(invalidAsStranger.json().error.code, "NOT_FOUND");
+
+    const invalidAsMember = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieBob },
+      payload: { userIds: "not-an-array" },
+    });
+    assert.equal(invalidAsMember.statusCode, 403);
+    assert.equal(invalidAsMember.json().error.code, "FORBIDDEN");
+
+    const ownerAsMember = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: [aliceId] },
+    });
+    assert.equal(ownerAsMember.statusCode, 400);
+    assert.equal(ownerAsMember.json().error.code, "VALIDATION_ERROR");
+
+    const unknown = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: ["00000000-0000-4000-8000-000000000099"] },
+    });
+    assert.equal(unknown.statusCode, 400);
+  });
+
+  await it("owner leave is 400; member can leave; revoke removes access", async () => {
+    const ownerLeave = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${sharedListId}/members/me`,
+      headers: { cookie: cookieAlice },
+    });
+    assert.equal(ownerLeave.statusCode, 400);
+
+    const leave = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${sharedListId}/members/me`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(leave.statusCode, 204);
+
+    const bobLists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(bobLists.json().lists.length, 0);
+
+    const bobItems = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedListId}/items`,
+      headers: { cookie: cookieBob },
+    });
+    assert.equal(bobItems.statusCode, 404);
+
+    const reshare = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: [bobId, carolId] },
+    });
+    assert.equal(reshare.statusCode, 200);
+    assert.equal(reshare.json().members.length, 2);
+
+    const revoke = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: [bobId] },
+    });
+    assert.equal(revoke.statusCode, 200);
+    assert.equal(revoke.json().members.length, 1);
+    assert.equal(revoke.json().members[0].userId, bobId);
+
+    const carolGone = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedListId}/items`,
+      headers: { cookie: cookieCarol },
+    });
+    assert.equal(carolGone.statusCode, 404);
+
+    const clearAll = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieAlice },
+      payload: { userIds: [] },
+    });
+    assert.equal(clearAll.statusCode, 200);
+    assert.equal(clearAll.json().members.length, 0);
   });
 });

@@ -75,6 +75,18 @@ describe("schema migrations", () => {
       .prepare(`SELECT COUNT(*) AS n FROM user_identities`)
       .get() as { n: number | bigint };
     assert.equal(Number(identities.n), 0);
+    const members = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'list_members'`,
+      )
+      .get() as { name: string } | undefined;
+    assert.equal(members?.name, "list_members");
+    const oidcStates = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oidc_login_states'`,
+      )
+      .get() as { name: string } | undefined;
+    assert.equal(oidcStates?.name, "oidc_login_states");
     db.close();
   });
 });

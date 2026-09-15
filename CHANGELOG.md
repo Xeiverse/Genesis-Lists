@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0
+
 ### OIDC
 
 - Optional OpenID Connect login (Authentik and compatible IdPs) via environment variables
@@ -16,7 +18,11 @@
 - Members can leave a shared list
 - `GET /api/users` directory for the share picker; schema version 2 (`list_members`)
 
-## 1.0.0
+### License
+
+- Relicensed under AGPL-3.0-only so modified network deployments must offer source
+
+## 0.1.0
 
 First release for self-hosting.
 

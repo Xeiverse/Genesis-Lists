@@ -31,7 +31,7 @@ docker compose up -d --build
 
 Open http://localhost:3000 and create an account. Local Compose leaves `COOKIE_SECURE=false` (plain HTTP) and `ALLOW_REGISTRATION=true` (anyone who can open the URL can register). That is fine on your machine. Do not publish port 3000 to the internet with those defaults.
 
-Until the `v1.0.0` image is on GHCR, `--build` is required. After it is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
+Until the `v0.2.0` image is on GHCR, `--build` is required. After it is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
 
 ## 2. Production
 
@@ -122,7 +122,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `ALLOW_REGISTRATION` | No | App: bootstrap. Compose default: `true` | `true`, `false`, or `bootstrap`. See above |
 | `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
 | `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
-| `GENESIS_LISTS_VERSION` | No | `1.0.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
+| `GENESIS_LISTS_VERSION` | No | `0.2.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
 | `PUBLIC_BASE_URL` | When OIDC enabled (unless `OIDC_REDIRECT_URI` set) | — | Canonical public origin, e.g. `https://lists.example.com` (no trailing path). Used to build the OIDC redirect URI |
 | `OIDC_ENABLED` | No | `false` | Enable OpenID Connect login |
 | `OIDC_ISSUER_URL` | When OIDC enabled | — | IdP issuer / discovery base (`.well-known/openid-configuration` optional) |
@@ -142,7 +142,7 @@ JSON request bodies larger than **16 KiB** are rejected (`400 VALIDATION_ERROR`)
 
 ## Data and upgrades
 
-On startup the app applies numbered schema steps and records them in `schema_migrations`. Existing 1.0 databases are left intact. Later releases add a migration step instead of expecting you to edit the file. `GET /api/health` includes `schemaVersion` so you can confirm the upgrade ran.
+On startup the app applies numbered schema steps and records them in `schema_migrations`. Existing 0.1 databases are left intact. Later releases add a migration step instead of expecting you to edit the file. `GET /api/health` includes `schemaVersion` so you can confirm the upgrade ran.
 
 The image runs as user id **10001**. A volume created by an older root image can fail with `EACCES` on `/data`. One-time fix (project name prefix may differ; check `docker volume ls`):
 
@@ -184,10 +184,10 @@ docker compose up -d
 
 ### Upgrade
 
-Image tags such as `1.0.0` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
+Image tags such as `0.2.0` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
 
 1. Back up (above).
-2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `1.1.0`).
+2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `0.2.0`).
 3. Pull and recreate, keeping the same volume:
 
 ```bash

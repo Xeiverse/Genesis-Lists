@@ -102,6 +102,16 @@ function claimString(
   return undefined;
 }
 
+/** Username claims must match local rules as returned by the IdP (no trim). */
+function claimUsernameRaw(
+  claims: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = claims[key];
+  if (typeof value === "string" && value.length > 0) return value;
+  return undefined;
+}
+
 export function extractOidcClaims(
   settings: OidcSettings,
   issuer: string,
@@ -112,7 +122,7 @@ export function extractOidcClaims(
     throw new Error("OIDC token is missing sub claim");
   }
 
-  const usernameRaw = claimString(claims, settings.usernameClaim);
+  const usernameRaw = claimUsernameRaw(claims, settings.usernameClaim);
   if (!usernameRaw) {
     throw new Error(`OIDC token is missing ${settings.usernameClaim} claim`);
   }

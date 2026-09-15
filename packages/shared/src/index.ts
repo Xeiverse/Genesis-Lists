@@ -61,6 +61,12 @@ export type UserDto = {
   authProviders: AuthProvider[];
 };
 
+/** Directory entry for the share picker (`GET /api/users`). */
+export type UserDirectoryDto = {
+  id: string;
+  username: string;
+};
+
 export type OidcPublicConfigDto = {
   enabled: boolean;
   buttonText: string;

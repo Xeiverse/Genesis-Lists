@@ -36,7 +36,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 - When only OIDC is enabled, omit the password fields.
 - Link to Register, shown only when registration is open **and** password login is enabled.
 - Inline error for auth failure. Support `?error=oidc` with a short message after a failed callback.
-- Auto-launch: if `oidc.enabled` and (`oidc.autoLaunch` or `?autoLaunch=1`) and not `?autoLaunch=0`, immediately navigate to `/api/auth/oidc/start`.
+- Auto-launch: if `oidc.enabled` and (`oidc.autoLaunch` or `?autoLaunch=1`) and not `?autoLaunch=0`, immediately navigate to `/api/auth/oidc/start`. Do **not** auto-launch when `?error=oidc` is present (unless `?autoLaunch=1` forces it), so the error message is visible.
 - On password success → Lists home. OIDC success lands on `/` via server redirect.
 
 ### 2. Register

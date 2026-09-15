@@ -12,7 +12,8 @@
 ## OIDC
 
 - Authorization Code flow with PKCE; confidential client secret via `OIDC_CLIENT_SECRET`.
-- Authorization `state` (and PKCE verifier / nonce) stored server-side with a short TTL; callback rejects unknown, reused, or expired state.
+- Authorization `state` (and PKCE verifier / nonce) stored server-side with a short TTL; callback rejects unknown, reused, or expired state. A signed HTTP-only cookie binds `state` to the initiating browser.
+- Expired OIDC login-state rows are pruned during start/callback as well as at startup.
 - Redirect URI is fixed to `{PUBLIC_BASE_URL}/api/auth/oidc/callback` or an explicit `OIDC_REDIRECT_URI` — never taken from user input.
 - IdP tokens are used only during the callback exchange; they are not persisted.
 - Username claims must match local username rules before merge or auto-register.

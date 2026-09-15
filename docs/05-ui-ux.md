@@ -29,19 +29,24 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 ### 1. Login
 
 - Product mark and “Genesis Lists” above the heading.
-- Centered card/form: username, password, submit.
-- Link to Register, shown only when registration is open (`GET /api/auth/registration`).
-- Inline error for auth failure.
-- On success → Lists home.
+- Load `GET /api/auth/config` for registration openness, password login, and OIDC settings.
+- When password login is enabled: centered card/form with username, password, submit.
+- When OIDC is enabled: a button labeled with `oidc.buttonText` that navigates to `/api/auth/oidc/start` (full page redirect).
+- When both are enabled, show the password form and the OIDC button (OIDC secondary or below a divider).
+- When only OIDC is enabled, omit the password fields.
+- Link to Register, shown only when registration is open **and** password login is enabled.
+- Inline error for auth failure. Support `?error=oidc` with a short message after a failed callback.
+- Auto-launch: if `oidc.enabled` and (`oidc.autoLaunch` or `?autoLaunch=1`) and not `?autoLaunch=0`, immediately navigate to `/api/auth/oidc/start`.
+- On password success → Lists home. OIDC success lands on `/` via server redirect.
 
 ### 2. Register
 
 - Product mark and “Genesis Lists” above the heading.
-- Username, password, submit.
+- Username, password, submit — only when password login is enabled and registration is open.
 - Link to Login.
 - Validation messages for username/password rules ([01-requirements.md](01-requirements.md)).
 - On success → Lists home (session created).
-- If registration is closed, the form is replaced with a short message and a link back to Sign in. No request is sent until the operator opens registration.
+- If registration is closed or password login is disabled, the form is replaced with a short message and a link back to Sign in. No register request is sent.
 
 ### 3. Lists home
 
@@ -68,8 +73,9 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 ### 5. Settings
 
 - App bar: back, “Settings”.
-- Show signed-in username.
-- Change password form: current, new, confirm; success feedback (other sessions are signed out); inline errors for mismatch / API failures.
+- Show signed-in username, optional email, and auth providers (`local` / `oidc`).
+- Change password form (current, new, confirm) only when `authProviders` includes `local`; success feedback (other sessions are signed out); inline errors for mismatch / API failures.
+- OIDC-only accounts see a short note that password change is unavailable.
 - Route: `/settings` (auth required).
 
 ## MD3 patterns

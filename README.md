@@ -6,7 +6,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 1.0.0. Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists` (see [Self-hosting](docs/06-self-hosting.md)).
+**Version:** 1.0.0. Optional OIDC (Authentik and compatible IdPs) is documented under [Self-hosting](docs/06-self-hosting.md) and [Authentik OAuth](docs/guides/oauth-authentik.md). Sharing and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists`.
 
 ## Features (MVP)
 
@@ -31,11 +31,13 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | [OpenAPI](docs/openapi/openapi.yaml) | Machine-readable API contract |
 | [UI/UX](docs/05-ui-ux.md) | Material Design 3 screens & flows |
 | [Self-hosting](docs/06-self-hosting.md) | Deploy, HTTPS, backup, upgrade |
+| [Authentik OAuth](docs/guides/oauth-authentik.md) | OIDC setup with Authentik |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
-| [Roadmap](docs/08-roadmap.md) | Sharing, OIDC, PWA (post-MVP) |
+| [Roadmap](docs/08-roadmap.md) | Sharing, PWA, OIDC follow-ups |
 | [ADRs](docs/adr/) | Architecture decisions |
-| [Acceptance checklist](docs/acceptance/mvp-checklist.md) | Verification checklist |
+| [MVP acceptance](docs/acceptance/mvp-checklist.md) | MVP verification checklist |
+| [OIDC acceptance](docs/acceptance/oidc-checklist.md) | OIDC verification checklist |
 
 ## Quick start (development)
 

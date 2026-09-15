@@ -1,6 +1,6 @@
 # Sharing Acceptance Checklist
 
-Maps to `REQ-SHARE-*` in [01-requirements.md](../01-requirements.md). Automated items run in CI (`pnpm test`). Browser checks performed 14 September 2026.
+Maps to `REQ-SHARE-*` in [01-requirements.md](../01-requirements.md). Automated items run in CI (`pnpm test`). Browser walkthrough was recorded on the sharing PR (agent demo, 14 September 2026).
 
 ## Sharing
 

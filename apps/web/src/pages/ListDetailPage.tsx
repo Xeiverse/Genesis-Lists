@@ -135,7 +135,7 @@ export function ListDetailPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [title, setTitle] = useState("List");
-  const [isOwner, setIsOwner] = useState(true);
+  const [isOwner, setIsOwner] = useState<boolean | null>(null);
   const [ownerUsername, setOwnerUsername] = useState("");
   const [items, setItems] = useState<ListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +158,7 @@ export function ListDetailPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setIsOwner(null);
     try {
       const [listsRes, itemsRes] = await Promise.all([api.lists(), api.items(id)]);
       const list = listsRes.lists.find((l) => l.id === id);
@@ -526,7 +527,7 @@ export function ListDetailPage() {
         >
           Rename list
         </MenuItem>
-        {isOwner ? (
+        {isOwner === true && (
           <>
             <MenuItem
               onClick={() => {
@@ -545,7 +546,8 @@ export function ListDetailPage() {
               Delete list
             </MenuItem>
           </>
-        ) : (
+        )}
+        {isOwner === false && (
           <MenuItem
             onClick={() => {
               setMenuAnchor(null);

@@ -843,6 +843,24 @@ describe("shared lists", async () => {
     });
     assert.equal(items.statusCode, 404);
 
+    const invalidAsStranger = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieCarol },
+      payload: { userIds: "not-an-array" },
+    });
+    assert.equal(invalidAsStranger.statusCode, 404);
+    assert.equal(invalidAsStranger.json().error.code, "NOT_FOUND");
+
+    const invalidAsMember = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedListId}/members`,
+      headers: { cookie: cookieBob },
+      payload: { userIds: "not-an-array" },
+    });
+    assert.equal(invalidAsMember.statusCode, 403);
+    assert.equal(invalidAsMember.json().error.code, "FORBIDDEN");
+
     const ownerAsMember = await app.inject({
       method: "PUT",
       url: `/api/lists/${sharedListId}/members`,

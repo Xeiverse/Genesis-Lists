@@ -260,14 +260,14 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const parsed = updateListSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
-    }
-
     const access = getListAccess(db, id, user.id);
     if (access === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+
+    const parsed = updateListSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
     const existing = loadListWithOwner(db, id);
@@ -346,11 +346,6 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const parsed = putListMembersSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
-    }
-
     const access = getListAccess(db, id, user.id);
     if (access === "none") {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
@@ -362,6 +357,11 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
         "FORBIDDEN",
         "Only the list owner can perform this action",
       );
+    }
+
+    const parsed = putListMembersSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
     const list = db
@@ -453,13 +453,13 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id: listId } = request.params as { id: string };
+    if (getListAccess(db, listId, user.id) === "none") {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+
     const parsed = createItemSchema.safeParse(request.body);
     if (!parsed.success) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
-    }
-
-    if (getListAccess(db, listId, user.id) === "none") {
-      return sendError(reply, 404, "NOT_FOUND", "Not found");
     }
 
     const maxRow = db
@@ -505,14 +505,14 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
     if (!user) return;
 
     const { id } = request.params as { id: string };
-    const parsed = updateItemSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
-    }
-
     const row = userCanAccessItem(db, id, user.id);
     if (!row) {
       return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
+
+    const parsed = updateItemSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Invalid request body");
     }
 
     const updatedAt = nowIso();

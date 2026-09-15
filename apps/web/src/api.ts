@@ -1,4 +1,5 @@
 import type {
+  AuthConfigDto,
   ListDto,
   ListItemDto,
   RegistrationStatusDto,
@@ -48,6 +49,7 @@ export const api = {
     request<{ status: string; version: string; schemaVersion?: number }>("/api/health"),
   registration: () =>
     request<RegistrationStatusDto>("/api/auth/registration"),
+  authConfig: () => request<AuthConfigDto>("/api/auth/config"),
   me: () => request<UserDto>("/api/auth/me"),
   register: (username: string, password: string) =>
     request<UserDto>("/api/auth/register", {

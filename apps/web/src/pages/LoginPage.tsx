@@ -1,16 +1,24 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Link as RouterLink, Navigate, useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Link as RouterLink,
+  Navigate,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   Container,
+  Divider,
   Link,
   Paper,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import type { AuthConfigDto } from "@genesis-lists/shared";
 import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
@@ -18,26 +26,48 @@ import { useAuth } from "../auth";
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [config, setConfig] = useState<AuthConfigDto | null>(null);
+
+  const oidcError = searchParams.get("error") === "oidc";
+  const autoLaunchParam = searchParams.get("autoLaunch");
 
   useEffect(() => {
     let cancelled = false;
     api
-      .registration()
-      .then((status) => {
-        if (!cancelled) setRegistrationOpen(status.open);
+      .authConfig()
+      .then((next) => {
+        if (!cancelled) setConfig(next);
       })
       .catch(() => {
-        if (!cancelled) setRegistrationOpen(false);
+        if (!cancelled) {
+          setConfig({
+            registrationOpen: false,
+            passwordLoginEnabled: true,
+            oidc: { enabled: false, buttonText: "Sign in with OIDC", autoLaunch: false },
+          });
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const shouldAutoLaunch = useMemo(() => {
+    if (!config?.oidc.enabled || user) return false;
+    if (autoLaunchParam === "0") return false;
+    if (autoLaunchParam === "1") return true;
+    return config.oidc.autoLaunch;
+  }, [config, user, autoLaunchParam]);
+
+  useEffect(() => {
+    if (!shouldAutoLaunch) return;
+    window.location.assign("/api/auth/oidc/start");
+  }, [shouldAutoLaunch]);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -55,6 +85,23 @@ export function LoginPage() {
     }
   }
 
+  if (!config || shouldAutoLaunch) {
+    return (
+      <Container maxWidth="xs" sx={{ py: 8 }}>
+        <Stack alignItems="center" spacing={2}>
+          <CircularProgress size={28} />
+          <Typography variant="body2" color="text.secondary">
+            {shouldAutoLaunch ? "Redirecting to sign-in…" : "Loading…"}
+          </Typography>
+        </Stack>
+      </Container>
+    );
+  }
+
+  const showPassword = config.passwordLoginEnabled;
+  const showOidc = config.oidc.enabled;
+  const showRegister = config.registrationOpen && config.passwordLoginEnabled;
+
   return (
     <Container maxWidth="xs" sx={{ py: 8 }}>
       <Paper elevation={0} sx={{ p: 3, bgcolor: "background.paper", border: 1, borderColor: "divider" }}>
@@ -68,28 +115,52 @@ export function LoginPage() {
           <Typography variant="h5" component="h1">
             Sign in
           </Typography>
-          {error && <Alert severity="error">{error}</Alert>}
-          <TextField
-            label="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            required
-            fullWidth
-          />
-          <TextField
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            fullWidth
-          />
-          <Button type="submit" disabled={submitting} fullWidth>
-            Sign in
-          </Button>
-          {registrationOpen && (
+          {(error || oidcError) && (
+            <Alert severity="error">
+              {error ?? "Sign-in with the identity provider failed. Try again."}
+            </Alert>
+          )}
+          {showPassword && (
+            <>
+              <TextField
+                label="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                required
+                fullWidth
+              />
+              <TextField
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                fullWidth
+              />
+              <Button type="submit" disabled={submitting} fullWidth>
+                Sign in
+              </Button>
+            </>
+          )}
+          {showPassword && showOidc && <Divider>or</Divider>}
+          {showOidc && (
+            <Button
+              component="a"
+              href="/api/auth/oidc/start"
+              variant={showPassword ? "outlined" : "contained"}
+              fullWidth
+            >
+              {config.oidc.buttonText}
+            </Button>
+          )}
+          {!showPassword && !showOidc && (
+            <Alert severity="warning">
+              No sign-in methods are configured on this server.
+            </Alert>
+          )}
+          {showRegister && (
             <Box>
               <Link component={RouterLink} to="/register">
                 Create an account

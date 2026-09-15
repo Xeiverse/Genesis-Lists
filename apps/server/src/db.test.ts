@@ -38,7 +38,7 @@ describe("schema migrations", () => {
     assert.equal(dbIsReady(db), false);
   });
 
-  it("stamps a pre-migration database without rewriting users", () => {
+  it("migrates a pre-migration database to the current schema without losing users", () => {
     const dbPath = tempDbPath("legacy");
     paths.push(dbPath);
     const legacy = new DatabaseSync(dbPath);
@@ -58,11 +58,23 @@ describe("schema migrations", () => {
     legacy.close();
 
     const db = createDb(dbPath);
-    assert.equal(getSchemaVersion(db), 1);
+    assert.equal(getSchemaVersion(db), SCHEMA_VERSION);
     const row = db
-      .prepare(`SELECT username FROM users WHERE id = ?`)
-      .get("user-1") as { username: string };
+      .prepare(
+        `SELECT username, password_hash, email FROM users WHERE id = ?`,
+      )
+      .get("user-1") as {
+      username: string;
+      password_hash: string | null;
+      email: string | null;
+    };
     assert.equal(row.username, "alice");
+    assert.equal(row.password_hash, "hash");
+    assert.equal(row.email, null);
+    const identities = db
+      .prepare(`SELECT COUNT(*) AS n FROM user_identities`)
+      .get() as { n: number | bigint };
+    assert.equal(Number(identities.n), 0);
     db.close();
   });
 });

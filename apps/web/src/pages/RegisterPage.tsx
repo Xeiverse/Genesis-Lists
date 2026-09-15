@@ -12,7 +12,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { passwordSchema, usernameSchema } from "@genesis-lists/shared";
+import { passwordSchema, usernameSchema, type AuthConfigDto } from "@genesis-lists/shared";
 import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
@@ -46,17 +46,23 @@ export function RegisterPage() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+  const [config, setConfig] = useState<AuthConfigDto | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     api
-      .registration()
-      .then((status) => {
-        if (!cancelled) setRegistrationOpen(status.open);
+      .authConfig()
+      .then((next) => {
+        if (!cancelled) setConfig(next);
       })
       .catch(() => {
-        if (!cancelled) setRegistrationOpen(false);
+        if (!cancelled) {
+          setConfig({
+            registrationOpen: false,
+            passwordLoginEnabled: true,
+            oidc: { enabled: false, buttonText: "Sign in with OIDC", autoLaunch: false },
+          });
+        }
       });
     return () => {
       cancelled = true;
@@ -85,6 +91,9 @@ export function RegisterPage() {
     }
   }
 
+  const registrationAllowed =
+    config != null && config.registrationOpen && config.passwordLoginEnabled;
+
   return (
     <Container maxWidth="xs" sx={{ py: 8 }}>
       <Paper elevation={0} sx={{ p: 3, bgcolor: "background.paper", border: 1, borderColor: "divider" }}>
@@ -98,11 +107,11 @@ export function RegisterPage() {
           <Typography variant="h5" component="h1">
             Create account
           </Typography>
-          {registrationOpen === null ? (
+          {config === null ? (
             <Stack alignItems="center" py={2}>
               <CircularProgress size={28} />
             </Stack>
-          ) : registrationOpen ? (
+          ) : registrationAllowed ? (
             <>
               <Typography variant="body2" color="text.secondary">
                 Username 3–32 chars (letters, numbers, _ -). Password min 8 characters.
@@ -141,8 +150,9 @@ export function RegisterPage() {
             </>
           ) : (
             <Alert severity="info">
-              Registration is closed. Ask the person who runs this server to open it if you
-              need an account.
+              {!config.passwordLoginEnabled
+                ? "Password registration is disabled. Sign in with your identity provider instead."
+                : "Registration is closed. Ask the person who runs this server to open it if you need an account."}
             </Alert>
           )}
           <Box>

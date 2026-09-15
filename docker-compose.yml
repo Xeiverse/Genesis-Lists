@@ -16,6 +16,18 @@ services:
       APP_VERSION: ${GENESIS_LISTS_VERSION:-1.0.0}
       NODE_ENV: production
       PORT: 3000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_SCOPE: ${OIDC_SCOPE:-openid profile email}
+      OIDC_BUTTON_TEXT: ${OIDC_BUTTON_TEXT:-Sign in with OIDC}
+      OIDC_AUTO_REGISTER: ${OIDC_AUTO_REGISTER:-true}
+      OIDC_AUTO_LAUNCH: ${OIDC_AUTO_LAUNCH:-false}
+      OIDC_USERNAME_CLAIM: ${OIDC_USERNAME_CLAIM:-preferred_username}
+      OIDC_DISABLE_PASSWORD_LOGIN: ${OIDC_DISABLE_PASSWORD_LOGIN:-false}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
     volumes:
       - genesis-data:/data
     restart: unless-stopped

@@ -16,6 +16,7 @@ import {
   type OidcSettings,
 } from "../oidc.js";
 import {
+  OIDC_STATE_COOKIE,
   SESSION_COOKIE,
   SESSION_DAYS,
   nowIso,
@@ -154,6 +155,33 @@ export async function registerAuth(
 
   function clearSessionCookie(reply: FastifyReply) {
     reply.clearCookie(SESSION_COOKIE, { path: "/", signed: true });
+  }
+
+  function setOidcStateCookie(reply: FastifyReply, state: string) {
+    reply.setCookie(OIDC_STATE_COOKIE, state, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: opts.cookieSecure,
+      signed: true,
+      maxAge: Math.floor(OIDC_STATE_TTL_MS / 1000),
+    });
+  }
+
+  function clearOidcStateCookie(reply: FastifyReply) {
+    reply.clearCookie(OIDC_STATE_COOKIE, { path: "/", signed: true });
+  }
+
+  function readOidcStateCookie(request: FastifyRequest) {
+    const raw = request.cookies[OIDC_STATE_COOKIE];
+    if (!raw) return undefined;
+    const unsigned = request.unsignCookie(raw);
+    if (!unsigned.valid || !unsigned.value) return undefined;
+    return unsigned.value;
+  }
+
+  function pruneOidcLoginStates() {
+    db.prepare(`DELETE FROM oidc_login_states WHERE expires_at <= ?`).run(nowIso());
   }
 
   function createSession(userId: string) {
@@ -306,6 +334,7 @@ export async function registerAuth(
     }
 
     try {
+      pruneOidcLoginStates();
       const { state, codeVerifier, nonce } = newOidcStateMaterials();
       db.prepare(
         `INSERT INTO oidc_login_states (state, code_verifier, nonce, expires_at, created_at)
@@ -317,6 +346,7 @@ export async function registerAuth(
         codeVerifier,
         nonce,
       });
+      setOidcStateCookie(reply, state);
       return reply.redirect(url.href);
     } catch (err) {
       app.log.error?.(err);
@@ -330,19 +360,32 @@ export async function registerAuth(
   });
 
   app.get("/api/auth/oidc/callback", async (request, reply) => {
-    const failRedirect = () => reply.redirect("/login?error=oidc");
+    const failRedirect = () => {
+      clearOidcStateCookie(reply);
+      return reply.redirect("/login?error=oidc");
+    };
 
     if (!oidc || !oidcSettings.enabled) {
       return failRedirect();
     }
 
+    pruneOidcLoginStates();
+
     const query = request.query as Record<string, string | undefined>;
+    const state = query.state;
+    const cookieState = readOidcStateCookie(request);
+
     if (query.error) {
+      if (state) {
+        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      }
       return failRedirect();
     }
 
-    const state = query.state;
-    if (!state) {
+    if (!state || !cookieState || state !== cookieState) {
+      if (state) {
+        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      }
       return failRedirect();
     }
 
@@ -380,6 +423,7 @@ export async function registerAuth(
 
       const { userId } = resolveUserFromOidcClaims(claims);
       const sessionId = createSession(userId);
+      clearOidcStateCookie(reply);
       setSessionCookie(reply, sessionId);
       return reply.redirect("/");
     } catch (err) {

@@ -60,9 +60,11 @@ export function LoginPage() {
   const shouldAutoLaunch = useMemo(() => {
     if (!config?.oidc.enabled || user) return false;
     if (autoLaunchParam === "0") return false;
+    // Failed callback lands on ?error=oidc — do not immediately restart OIDC.
+    if (oidcError && autoLaunchParam !== "1") return false;
     if (autoLaunchParam === "1") return true;
     return config.oidc.autoLaunch;
-  }, [config, user, autoLaunchParam]);
+  }, [config, user, autoLaunchParam, oidcError]);
 
   useEffect(() => {
     if (!shouldAutoLaunch) return;

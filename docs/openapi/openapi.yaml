@@ -277,7 +277,7 @@ paths:
                   users:
                     type: array
                     items:
-                      $ref: '#/components/schemas/User'
+                      $ref: '#/components/schemas/UserDirectoryEntry'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
@@ -726,6 +726,18 @@ components:
           description: >
             How this account can authenticate. local means a password hash is set;
             oidc means at least one linked identity exists.
+
+    UserDirectoryEntry:
+      type: object
+      required: [id, username]
+      description: Share-picker directory entry from GET /api/users (no authProviders).
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+
     ListItemPreview:
       type: object
       required: [id, text, checked]

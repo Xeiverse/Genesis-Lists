@@ -14,6 +14,17 @@ function getCookie(res: { headers: Record<string, unknown> }) {
   return first.split(";")[0];
 }
 
+function pickCookie(
+  res: { headers: Record<string, unknown> },
+  name: string,
+) {
+  const raw = res.headers["set-cookie"];
+  if (!raw) return undefined;
+  const list = Array.isArray(raw) ? raw : [String(raw)];
+  const match = list.find((c) => String(c).startsWith(`${name}=`));
+  return match ? String(match).split(";")[0] : undefined;
+}
+
 describe("Genesis Lists API contract", async () => {
   let app: FastifyInstance;
   let dbPath: string;
@@ -775,14 +786,17 @@ describe("OIDC auth", async () => {
         assert.ok(location.startsWith("https://idp.example.com/authorize"));
         const state = new URL(location).searchParams.get("state");
         assert.ok(state);
+        const oidcCookie = pickCookie(start, "genesis_oidc_state");
+        assert.ok(oidcCookie);
 
         const callback = await app.inject({
           method: "GET",
           url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state!)}`,
+          headers: { cookie: oidcCookie! },
         });
         assert.equal(callback.statusCode, 302);
         assert.equal(callback.headers.location, "/");
-        const cookie = getCookie(callback)!;
+        const cookie = pickCookie(callback, "genesis_session")!;
         assert.ok(cookie.includes("genesis_session="));
 
         const me = await app.inject({
@@ -802,6 +816,35 @@ describe("OIDC auth", async () => {
           payload: { currentPassword: "password1", newPassword: "password2" },
         });
         assert.equal(change.statusCode, 403);
+      },
+    );
+  });
+
+  await it("OIDC callback without state cookie is rejected (login CSRF)", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-csrf",
+          username: "csrfuser",
+          email: null,
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start",
+        });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(callback.headers.location, "/login?error=oidc");
+        assert.equal(pickCookie(callback, "genesis_session"), undefined);
       },
     );
   });
@@ -829,11 +872,13 @@ describe("OIDC auth", async () => {
         const state = new URL(start.headers.location as string).searchParams.get(
           "state",
         )!;
+        const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
         const callback = await app.inject({
           method: "GET",
           url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+          headers: { cookie: oidcCookie },
         });
-        const cookie = getCookie(callback)!;
+        const cookie = pickCookie(callback, "genesis_session")!;
         const me = await app.inject({
           method: "GET",
           url: "/api/auth/me",
@@ -862,9 +907,11 @@ describe("OIDC auth", async () => {
         const state = new URL(start.headers.location as string).searchParams.get(
           "state",
         )!;
+        const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
         const callback = await app.inject({
           method: "GET",
           url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+          headers: { cookie: oidcCookie },
         });
         assert.equal(callback.statusCode, 302);
         assert.equal(callback.headers.location, "/login?error=oidc");

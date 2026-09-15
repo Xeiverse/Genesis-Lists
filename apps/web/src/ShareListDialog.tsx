@@ -20,7 +20,7 @@ import {
   Typography,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import type { UserDto } from "@genesis-lists/shared";
+import type { UserDirectoryDto } from "@genesis-lists/shared";
 import { api, ApiError } from "./api";
 
 type ShareListDialogProps = {
@@ -42,7 +42,7 @@ export function ShareListDialog({
 }: ShareListDialogProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [users, setUsers] = useState<UserDto[]>([]);
+  const [users, setUsers] = useState<UserDirectoryDto[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [resolvedOwnerId, setResolvedOwnerId] = useState<string | undefined>(

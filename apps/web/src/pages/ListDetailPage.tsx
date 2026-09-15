@@ -33,6 +33,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import type { ListItemDto } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
+import { ShareListDialog } from "../ShareListDialog";
+import { useAuth } from "../auth";
 
 function byPosition(a: ListItemDto, b: ListItemDto) {
   return a.position - b.position;
@@ -131,13 +133,18 @@ function ItemRow({
 export function ListDetailPage() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [title, setTitle] = useState("List");
+  const [isOwner, setIsOwner] = useState<boolean | null>(null);
+  const [ownerUsername, setOwnerUsername] = useState("");
   const [items, setItems] = useState<ListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
@@ -151,6 +158,7 @@ export function ListDetailPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
+    setIsOwner(null);
     try {
       const [listsRes, itemsRes] = await Promise.all([api.lists(), api.items(id)]);
       const list = listsRes.lists.find((l) => l.id === id);
@@ -160,6 +168,8 @@ export function ListDetailPage() {
         return;
       }
       setTitle(list.name);
+      setIsOwner(list.isOwner);
+      setOwnerUsername(list.ownerUsername);
       setItems(itemsRes.items);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load list");
@@ -332,6 +342,15 @@ export function ListDetailPage() {
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Delete failed");
+    }
+  }
+
+  async function handleLeaveList() {
+    try {
+      await api.leaveList(id);
+      navigate("/");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Leave failed");
     }
   }
 
@@ -508,14 +527,36 @@ export function ListDetailPage() {
         >
           Rename list
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setMenuAnchor(null);
-            setDeleteOpen(true);
-          }}
-        >
-          Delete list
-        </MenuItem>
+        {isOwner === true && (
+          <>
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null);
+                setShareOpen(true);
+              }}
+            >
+              Share
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null);
+                setDeleteOpen(true);
+              }}
+            >
+              Delete list
+            </MenuItem>
+          </>
+        )}
+        {isOwner === false && (
+          <MenuItem
+            onClick={() => {
+              setMenuAnchor(null);
+              setLeaveOpen(true);
+            }}
+          >
+            Leave list
+          </MenuItem>
+        )}
       </Menu>
 
       <Dialog open={clearOpen} onClose={() => setClearOpen(false)}>
@@ -551,6 +592,32 @@ export function ListDetailPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={leaveOpen} onClose={() => setLeaveOpen(false)}>
+        <DialogTitle>Leave list?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You will lose access to “{title}” until the owner shares it with you again.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={() => setLeaveOpen(false)}>
+            Cancel
+          </Button>
+          <Button color="error" onClick={() => void handleLeaveList()}>
+            Leave
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ShareListDialog
+        open={shareOpen}
+        listId={id}
+        ownerUsername={ownerUsername || user?.username || ""}
+        ownerUserId={user?.id}
+        onClose={() => setShareOpen(false)}
+        onError={setError}
+      />
 
       <Snackbar open={Boolean(error)} autoHideDuration={4000} onClose={() => setError(null)}>
         <Alert severity="error" onClose={() => setError(null)}>

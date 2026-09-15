@@ -5,6 +5,8 @@
 ```mermaid
 erDiagram
   users ||--o{ lists : owns
+  users ||--o{ list_members : "is member"
+  lists ||--o{ list_members : "shared with"
   lists ||--o{ list_items : contains
   users {
     text id PK
@@ -18,6 +20,12 @@ erDiagram
     text name
     datetime created_at
     datetime updated_at
+  }
+  list_members {
+    text list_id PK_FK
+    text user_id PK_FK
+    text role
+    datetime created_at
   }
   list_items {
     text id PK
@@ -51,6 +59,17 @@ erDiagram
 | `created_at` | text | NOT NULL | UTC |
 | `updated_at` | text | NOT NULL | UTC; bump on rename |
 
+### `list_members`
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `list_id` | text | PK (composite), FK → lists.id, ON DELETE CASCADE | Shared list |
+| `user_id` | text | PK (composite), FK → users.id, ON DELETE CASCADE | Member (never the owner) |
+| `role` | text | NOT NULL | Always `member` for now (forward-compatible) |
+| `created_at` | text | NOT NULL | UTC |
+
+Unique membership is enforced by the composite primary key `(list_id, user_id)`. Index `user_id` for “lists shared with me” queries.
+
 ### `list_items`
 
 | Column | Type | Constraints | Notes |
@@ -63,19 +82,18 @@ erDiagram
 | `created_at` | text | NOT NULL | UTC |
 | `updated_at` | text | NOT NULL | UTC |
 
-## Ownership rules
+## Ownership & access rules
 
-1. A list belongs to exactly one `owner_id`.
-2. An item is accessible only if its parent list’s `owner_id` equals the authenticated user.
-3. On unauthorized access, respond with **404** (not 403) to avoid leaking existence.
-4. Deleting a list deletes all of its items (cascade).
-
-## Future: sharing (not MVP)
-
-A `list_members(list_id, user_id, role)` table can grant access without changing `list_items`. Ownership remains on `lists.owner_id`. Documented in [08-roadmap.md](08-roadmap.md).
+1. A list belongs to exactly one `owner_id`. The owner is **not** stored as a `list_members` row.
+2. A user may access a list if they are the owner **or** a row exists in `list_members` for that user.
+3. **Owner** may read/write items, rename, delete the list, and manage members.
+4. **Member** (`role = member`) may read/write items and rename; may leave the list; may **not** delete the list or manage members.
+5. On access without ownership or membership, respond with **404** (not 403) to avoid leaking existence.
+6. When the user has access but lacks a capability (e.g. member deletes list), respond with **403 FORBIDDEN**.
+7. Deleting a list deletes all of its items and memberships (cascade).
 
 ## Sessions (implementation detail)
 
-MVP stores sessions in a `sessions` table (id, user_id, expires_at, created_at) with the session id in an HTTP-only cookie. See [07-security.md](07-security.md) and ADR 0002. Session storage is not exposed in the public API data model. Expired session rows are deleted on startup.
+Sessions are stored in a `sessions` table (id, user_id, expires_at, created_at) with the session id in an HTTP-only cookie. See [07-security.md](07-security.md) and ADR 0002. Session storage is not exposed in the public API data model. Expired session rows are deleted on startup.
 
-Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API.
+Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Current schema version is **2** (`list_members`).

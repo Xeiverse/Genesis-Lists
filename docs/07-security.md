@@ -48,7 +48,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Password theft at rest | argon2id |
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
-| OIDC CSRF / replay | `state` + PKCE; one-time server-side state rows |
+| OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser; one-time server-side state rows |
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
 | Secret leakage | `SESSION_SECRET` / `OIDC_CLIENT_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |

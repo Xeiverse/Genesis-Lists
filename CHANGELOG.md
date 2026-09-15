@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Optional OpenID Connect login (Authentik and compatible IdPs) via environment variables
+- Username merge links IdP users to existing local accounts; optional email from claims
+- `OIDC_DISABLE_PASSWORD_LOGIN` for IdP-only households
+- Schema version 2: nullable passwords, `user_identities`, OIDC login state
+
 ## 1.0.0
 
 First release for self-hosting.

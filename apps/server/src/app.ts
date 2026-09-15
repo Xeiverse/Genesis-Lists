@@ -5,6 +5,7 @@ import path from "node:path";
 import { createDb, dbIsReady, getSchemaVersion } from "./db/index.js";
 import { registerAuth } from "./routes/auth.js";
 import { registerListRoutes } from "./routes/lists.js";
+import type { OidcProvider } from "./oidc.js";
 import {
   BODY_LIMIT_BYTES,
   sendError,
@@ -18,6 +19,7 @@ export type AppConfig = {
   staticDir?: string;
   registrationMode?: RegistrationMode;
   version?: string;
+  oidc?: OidcProvider | null;
 };
 
 async function buildFastify(config: AppConfig) {
@@ -90,6 +92,7 @@ async function buildFastify(config: AppConfig) {
     cookieSecure: config.cookieSecure,
     sessionSecret: config.sessionSecret,
     registrationMode: config.registrationMode ?? "bootstrap",
+    oidc: config.oidc ?? null,
   });
   await registerListRoutes(app, db);
 

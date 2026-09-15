@@ -52,8 +52,28 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), {
       status: "ok",
       version: "1.0.0",
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
+  });
+
+  await it("GET /api/auth/config defaults", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/auth/config" });
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.json(), {
+      registrationOpen: true,
+      passwordLoginEnabled: true,
+      oidc: {
+        enabled: false,
+        buttonText: "Sign in with OIDC",
+        autoLaunch: false,
+      },
+    });
+  });
+
+  await it("OIDC start is 404 when disabled", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/auth/oidc/start" });
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.json().error.code, "NOT_FOUND");
   });
 
   await it("unauthenticated protected routes are 401", async () => {
@@ -158,6 +178,8 @@ describe("Genesis Lists API contract", async () => {
     });
     assert.equal(res.statusCode, 200);
     assert.equal(res.json().username, "alice");
+    assert.deepEqual(res.json().authProviders, ["local"]);
+    assert.equal(res.json().email, null);
   });
 
   await it("create and list lists", async () => {
@@ -627,5 +649,222 @@ describe("registration gate", async () => {
       assert.equal(res.statusCode, 403);
       assert.equal(res.json().error.code, "FORBIDDEN");
     });
+  });
+});
+
+describe("OIDC auth", async () => {
+  async function withOidcApp(
+    opts: {
+      disablePasswordLogin?: boolean;
+      autoRegister?: boolean;
+      exchange: (callbackUrl: URL) => {
+        issuer: string;
+        subject: string;
+        username: string;
+        email: string | null;
+      };
+    },
+    run: (app: FastifyInstance) => Promise<void>,
+  ) {
+    const { createMockOidcProvider } = await import("./oidc.js");
+    const dbPath = path.join(os.tmpdir(), `genesis-oidc-${Date.now()}.db`);
+    const settings = {
+      enabled: true,
+      issuerUrl: "https://idp.example.com/application/o/genesis/",
+      clientId: "test-client",
+      clientSecret: "test-secret",
+      scope: "openid profile email",
+      buttonText: "Sign in with Authentik",
+      autoRegister: opts.autoRegister ?? true,
+      autoLaunch: true,
+      usernameClaim: "preferred_username",
+      disablePasswordLogin: opts.disablePasswordLogin ?? false,
+      redirectUri: "https://lists.example.com/api/auth/oidc/callback",
+    };
+    const oidc = createMockOidcProvider(settings, {
+      exchange: opts.exchange,
+    });
+    const app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret-at-least-32-characters-long",
+      cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
+      oidc,
+    });
+    await app.ready();
+    try {
+      await run(app);
+    } finally {
+      await app.close();
+      for (const suffix of ["", "-wal", "-shm"]) {
+        try {
+          if (fs.existsSync(dbPath + suffix)) fs.unlinkSync(dbPath + suffix);
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  await it("config exposes OIDC and password disable blocks login/register", async () => {
+    await withOidcApp(
+      {
+        disablePasswordLogin: true,
+        exchange: () => {
+          throw new Error("unused");
+        },
+      },
+      async (app) => {
+        const config = await app.inject({ method: "GET", url: "/api/auth/config" });
+        assert.equal(config.statusCode, 200);
+        assert.deepEqual(config.json(), {
+          registrationOpen: false,
+          passwordLoginEnabled: false,
+          oidc: {
+            enabled: true,
+            buttonText: "Sign in with Authentik",
+            autoLaunch: true,
+          },
+        });
+
+        const reg = await app.inject({
+          method: "GET",
+          url: "/api/auth/registration",
+        });
+        assert.deepEqual(reg.json(), { open: false });
+
+        const login = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { username: "alice", password: "password1" },
+        });
+        assert.equal(login.statusCode, 403);
+
+        const register = await app.inject({
+          method: "POST",
+          url: "/api/auth/register",
+          payload: { username: "alice", password: "password1" },
+        });
+        assert.equal(register.statusCode, 403);
+      },
+    );
+  });
+
+  await it("OIDC start redirects and callback creates user with email", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-alice-1",
+          username: "alice",
+          email: "alice@example.com",
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start",
+        });
+        assert.equal(start.statusCode, 302);
+        const location = start.headers.location as string;
+        assert.ok(location.startsWith("https://idp.example.com/authorize"));
+        const state = new URL(location).searchParams.get("state");
+        assert.ok(state);
+
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state!)}`,
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(callback.headers.location, "/");
+        const cookie = getCookie(callback)!;
+        assert.ok(cookie.includes("genesis_session="));
+
+        const me = await app.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          headers: { cookie },
+        });
+        assert.equal(me.statusCode, 200);
+        assert.equal(me.json().username, "alice");
+        assert.equal(me.json().email, "alice@example.com");
+        assert.deepEqual(me.json().authProviders, ["oidc"]);
+
+        const change = await app.inject({
+          method: "POST",
+          url: "/api/auth/change-password",
+          headers: { cookie },
+          payload: { currentPassword: "password1", newPassword: "password2" },
+        });
+        assert.equal(change.statusCode, 403);
+      },
+    );
+  });
+
+  await it("OIDC merges onto existing local username", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-bob-9",
+          username: "bob",
+          email: "bob@example.com",
+        }),
+      },
+      async (app) => {
+        const register = await app.inject({
+          method: "POST",
+          url: "/api/auth/register",
+          payload: { username: "bob", password: "password1" },
+        });
+        assert.equal(register.statusCode, 201);
+        const localId = register.json().id;
+
+        const start = await app.inject({ method: "GET", url: "/api/auth/oidc/start" });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+        });
+        const cookie = getCookie(callback)!;
+        const me = await app.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          headers: { cookie },
+        });
+        assert.equal(me.json().id, localId);
+        assert.equal(me.json().email, "bob@example.com");
+        assert.deepEqual(me.json().authProviders.sort(), ["local", "oidc"]);
+      },
+    );
+  });
+
+  await it("OIDC auto-register off rejects unknown username", async () => {
+    await withOidcApp(
+      {
+        autoRegister: false,
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-nobody",
+          username: "nobody",
+          email: null,
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({ method: "GET", url: "/api/auth/oidc/start" });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(callback.headers.location, "/login?error=oidc");
+      },
+    );
   });
 });

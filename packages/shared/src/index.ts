@@ -52,9 +52,25 @@ export const updateItemSchema = z
     message: "At least one field required",
   });
 
+export type AuthProvider = "local" | "oidc";
+
 export type UserDto = {
   id: string;
   username: string;
+  email?: string | null;
+  authProviders: AuthProvider[];
+};
+
+export type OidcPublicConfigDto = {
+  enabled: boolean;
+  buttonText: string;
+  autoLaunch: boolean;
+};
+
+export type AuthConfigDto = {
+  registrationOpen: boolean;
+  passwordLoginEnabled: boolean;
+  oidc: OidcPublicConfigDto;
 };
 
 export type ListDto = {

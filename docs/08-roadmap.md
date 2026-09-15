@@ -11,9 +11,9 @@ Specs first for each item—extend docs and OpenAPI before implementation.
 
 ## Third-party authentication (Authentik / OIDC)
 
-**In progress** — see [ADR 0005](adr/0005-oidc.md), [requirements](01-requirements.md) (`REQ-OIDC-*`), and [guides/oauth-authentik.md](guides/oauth-authentik.md).
+**Shipped** (env-based OIDC) — see [ADR 0005](adr/0005-oidc.md), [requirements](01-requirements.md) (`REQ-OIDC-*`), and [guides/oauth-authentik.md](guides/oauth-authentik.md).
 
-Done in this workstream:
+Included:
 
 - Env-based OIDC (Authorization Code + PKCE)
 - Map OIDC `sub` + issuer; username merge; optional email

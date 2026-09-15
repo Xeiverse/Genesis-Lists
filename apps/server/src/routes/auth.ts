@@ -4,9 +4,17 @@ import argon2 from "argon2";
 import {
   authCredentialsSchema,
   changePasswordSchema,
+  type AuthProvider,
   type UserDto,
 } from "@genesis-lists/shared";
 import type { Db, UserRow } from "../db/index.js";
+import {
+  OIDC_STATE_TTL_MS,
+  newOidcStateMaterials,
+  type OidcClaims,
+  type OidcProvider,
+  type OidcSettings,
+} from "../oidc.js";
 import {
   SESSION_COOKIE,
   SESSION_DAYS,
@@ -22,6 +30,26 @@ function sessionExpiry() {
   return d.toISOString();
 }
 
+function oidcStateExpiry() {
+  return new Date(Date.now() + OIDC_STATE_TTL_MS).toISOString();
+}
+
+function disabledOidcSettings(): OidcSettings {
+  return {
+    enabled: false,
+    issuerUrl: "",
+    clientId: "",
+    clientSecret: "",
+    scope: "openid profile email",
+    buttonText: "Sign in with OIDC",
+    autoRegister: true,
+    autoLaunch: false,
+    usernameClaim: "preferred_username",
+    disablePasswordLogin: false,
+    redirectUri: "",
+  };
+}
+
 export async function registerAuth(
   app: FastifyInstance,
   db: Db,
@@ -29,9 +57,14 @@ export async function registerAuth(
     cookieSecure: boolean;
     sessionSecret: string;
     registrationMode: RegistrationMode;
+    oidc?: OidcProvider | null;
   },
 ) {
+  const oidc = opts.oidc ?? null;
+  const oidcSettings = oidc?.settings ?? disabledOidcSettings();
+
   function registrationOpen() {
+    if (oidcSettings.disablePasswordLogin) return false;
     if (opts.registrationMode === "open") return true;
     if (opts.registrationMode === "closed") return false;
     const row = db.prepare(`SELECT COUNT(*) AS n FROM users`).get() as {
@@ -39,6 +72,43 @@ export async function registerAuth(
     };
     return Number(row.n) === 0;
   }
+
+  function passwordLoginEnabled() {
+    return !oidcSettings.disablePasswordLogin;
+  }
+
+  function toUserDto(userId: string): UserDto | null {
+    const row = db
+      .prepare(
+        `SELECT id, username, email, password_hash FROM users WHERE id = ?`,
+      )
+      .get(userId) as
+      | {
+          id: string;
+          username: string;
+          email: string | null;
+          password_hash: string | null;
+        }
+      | undefined;
+    if (!row) return null;
+
+    const hasOidc = db
+      .prepare(`SELECT 1 AS ok FROM user_identities WHERE user_id = ? LIMIT 1`)
+      .get(userId) as { ok: number } | undefined;
+
+    const authProviders: AuthProvider[] = [];
+    if (row.password_hash) authProviders.push("local");
+    if (hasOidc) authProviders.push("oidc");
+    if (authProviders.length === 0) authProviders.push("local");
+
+    return {
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      authProviders,
+    };
+  }
+
   await app.register(cookie, {
     secret: opts.sessionSecret,
   });
@@ -94,11 +164,75 @@ export async function registerAuth(
     return id;
   }
 
+  function resolveUserFromOidcClaims(claims: OidcClaims): { userId: string } {
+    const existingIdentity = db
+      .prepare(
+        `SELECT user_id FROM user_identities WHERE issuer = ? AND subject = ?`,
+      )
+      .get(claims.issuer, claims.subject) as { user_id: string } | undefined;
+
+    if (existingIdentity) {
+      if (claims.email) {
+        db.prepare(`UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email != ?)`).run(
+          claims.email,
+          existingIdentity.user_id,
+          claims.email,
+        );
+      }
+      return { userId: existingIdentity.user_id };
+    }
+
+    const byUsername = db
+      .prepare(`SELECT id FROM users WHERE username = ?`)
+      .get(claims.username) as { id: string } | undefined;
+
+    if (byUsername) {
+      db.prepare(
+        `INSERT INTO user_identities (id, user_id, issuer, subject, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(uuid(), byUsername.id, claims.issuer, claims.subject, nowIso());
+      if (claims.email) {
+        db.prepare(
+          `UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email != ?)`,
+        ).run(claims.email, byUsername.id, claims.email);
+      }
+      return { userId: byUsername.id };
+    }
+
+    if (!oidcSettings.autoRegister) {
+      throw new Error("OIDC_AUTO_REGISTER_DISABLED");
+    }
+
+    const userId = uuid();
+    db.prepare(
+      `INSERT INTO users (id, username, password_hash, email, created_at)
+       VALUES (?, ?, NULL, ?, ?)`,
+    ).run(userId, claims.username, claims.email, nowIso());
+    db.prepare(
+      `INSERT INTO user_identities (id, user_id, issuer, subject, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(uuid(), userId, claims.issuer, claims.subject, nowIso());
+    return { userId };
+  }
+
   app.get("/api/auth/registration", async () => ({
     open: registrationOpen(),
   }));
 
+  app.get("/api/auth/config", async () => ({
+    registrationOpen: registrationOpen(),
+    passwordLoginEnabled: passwordLoginEnabled(),
+    oidc: {
+      enabled: oidcSettings.enabled,
+      buttonText: oidcSettings.buttonText,
+      autoLaunch: oidcSettings.autoLaunch,
+    },
+  }));
+
   app.post("/api/auth/register", async (request, reply) => {
+    if (!passwordLoginEnabled()) {
+      return sendError(reply, 403, "FORBIDDEN", "Password registration is disabled");
+    }
     if (!registrationOpen()) {
       return sendError(reply, 403, "FORBIDDEN", "Registration is closed");
     }
@@ -124,17 +258,21 @@ export async function registerAuth(
     const createdAt = nowIso();
 
     db.prepare(
-      `INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, NULL, ?)`,
     ).run(id, username, passwordHash, createdAt);
 
     const sessionId = createSession(id);
     setSessionCookie(reply, sessionId);
 
-    const user: UserDto = { id, username };
+    const user = toUserDto(id)!;
     return reply.status(201).send(user);
   });
 
   app.post("/api/auth/login", async (request, reply) => {
+    if (!passwordLoginEnabled()) {
+      return sendError(reply, 403, "FORBIDDEN", "Password login is disabled");
+    }
+
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
       const detail = parsed.error.issues
@@ -147,7 +285,7 @@ export async function registerAuth(
     const row = db
       .prepare(`SELECT * FROM users WHERE username = ?`)
       .get(username) as UserRow | undefined;
-    if (!row) {
+    if (!row || !row.password_hash) {
       return sendError(reply, 401, "UNAUTHORIZED", "Invalid username or password");
     }
 
@@ -159,8 +297,95 @@ export async function registerAuth(
     const sessionId = createSession(row.id);
     setSessionCookie(reply, sessionId);
 
-    const user: UserDto = { id: row.id, username: row.username };
-    return reply.send(user);
+    return reply.send(toUserDto(row.id)!);
+  });
+
+  app.get("/api/auth/oidc/start", async (_request, reply) => {
+    if (!oidc || !oidcSettings.enabled) {
+      return sendError(reply, 404, "NOT_FOUND", "OIDC is not enabled");
+    }
+
+    try {
+      const { state, codeVerifier, nonce } = newOidcStateMaterials();
+      db.prepare(
+        `INSERT INTO oidc_login_states (state, code_verifier, nonce, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(state, codeVerifier, nonce, oidcStateExpiry(), nowIso());
+
+      const url = await oidc.buildAuthorizationUrl({
+        state,
+        codeVerifier,
+        nonce,
+      });
+      return reply.redirect(url.href);
+    } catch (err) {
+      app.log.error?.(err);
+      return sendError(
+        reply,
+        503,
+        "INTERNAL_ERROR",
+        "OIDC authorization is temporarily unavailable",
+      );
+    }
+  });
+
+  app.get("/api/auth/oidc/callback", async (request, reply) => {
+    const failRedirect = () => reply.redirect("/login?error=oidc");
+
+    if (!oidc || !oidcSettings.enabled) {
+      return failRedirect();
+    }
+
+    const query = request.query as Record<string, string | undefined>;
+    if (query.error) {
+      return failRedirect();
+    }
+
+    const state = query.state;
+    if (!state) {
+      return failRedirect();
+    }
+
+    const stored = db
+      .prepare(
+        `SELECT state, code_verifier, nonce, expires_at FROM oidc_login_states WHERE state = ?`,
+      )
+      .get(state) as
+      | {
+          state: string;
+          code_verifier: string;
+          nonce: string | null;
+          expires_at: string;
+        }
+      | undefined;
+
+    db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+
+    if (!stored || stored.expires_at <= nowIso()) {
+      return failRedirect();
+    }
+
+    try {
+      const callbackUrl = new URL(oidcSettings.redirectUri);
+      for (const [key, value] of Object.entries(query)) {
+        if (value != null) callbackUrl.searchParams.set(key, value);
+      }
+
+      const claims = await oidc.exchangeCallback({
+        callbackUrl,
+        codeVerifier: stored.code_verifier,
+        expectedState: stored.state,
+        expectedNonce: stored.nonce,
+      });
+
+      const { userId } = resolveUserFromOidcClaims(claims);
+      const sessionId = createSession(userId);
+      setSessionCookie(reply, sessionId);
+      return reply.redirect("/");
+    } catch (err) {
+      app.log.error?.(err);
+      return failRedirect();
+    }
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
@@ -179,10 +404,10 @@ export async function registerAuth(
     if (!request.user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
-    const user: UserDto = {
-      id: request.user.id,
-      username: request.user.username,
-    };
+    const user = toUserDto(request.user.id);
+    if (!user) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
+    }
     return reply.send(user);
   });
 
@@ -202,6 +427,14 @@ export async function registerAuth(
       .get(request.user.id) as UserRow | undefined;
     if (!row) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
+    }
+    if (!row.password_hash) {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "Password change is not available for this account",
+      );
     }
 
     const ok = await argon2.verify(row.password_hash, currentPassword);

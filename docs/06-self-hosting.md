@@ -123,6 +123,20 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
 | `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
 | `GENESIS_LISTS_VERSION` | No | `1.0.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
+| `PUBLIC_BASE_URL` | When OIDC enabled (unless `OIDC_REDIRECT_URI` set) | — | Canonical public origin, e.g. `https://lists.example.com` (no trailing path). Used to build the OIDC redirect URI |
+| `OIDC_ENABLED` | No | `false` | Enable OpenID Connect login |
+| `OIDC_ISSUER_URL` | When OIDC enabled | — | IdP issuer / discovery base (`.well-known/openid-configuration` optional) |
+| `OIDC_CLIENT_ID` | When OIDC enabled | — | Confidential client id |
+| `OIDC_CLIENT_SECRET` | When OIDC enabled | — | Client secret |
+| `OIDC_SCOPE` | No | `openid profile email` | Space-delimited scopes |
+| `OIDC_BUTTON_TEXT` | No | `Sign in with OIDC` | Login button label |
+| `OIDC_AUTO_REGISTER` | No | `true` | Create a local user on first OIDC login when no username match exists |
+| `OIDC_AUTO_LAUNCH` | No | `false` | Skip the login form and start OIDC immediately |
+| `OIDC_USERNAME_CLAIM` | No | `preferred_username` | Claim mapped to local username (merge / create) |
+| `OIDC_DISABLE_PASSWORD_LOGIN` | No | `false` | When `true` and OIDC is enabled, reject local password login/register |
+| `OIDC_REDIRECT_URI` | No | derived | Full callback URL override; default `{PUBLIC_BASE_URL}/api/auth/oidc/callback` |
+
+When `OIDC_ENABLED=true`, the process refuses to start if issuer, client id/secret, or redirect base URL are missing, or if OIDC discovery fails. Step-by-step Authentik setup: [guides/oauth-authentik.md](guides/oauth-authentik.md).
 
 JSON request bodies larger than **16 KiB** are rejected (`400 VALIDATION_ERROR`).
 
@@ -200,6 +214,8 @@ Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in 
 | Login works, then you are logged out | `COOKIE_SECURE` does not match the URL scheme. HTTPS requires `true`. HTTP (localhost only) requires `false`. |
 | Empty lists after an update | Volume name changed (`docker volume ls`). Point Compose back at the volume that has `app.db`. |
 | `EACCES` writing `/data` | Volume is still owned by root. `chown` to `10001:10001` as above. |
-| Register link is missing; register page says registration is closed | Expected after the first account when mode is `bootstrap`. Set `ALLOW_REGISTRATION=true`, recreate, add the account, then close it again. |
+| Register link is missing; register page says registration is closed | Expected after the first account when mode is `bootstrap`. Set `ALLOW_REGISTRATION=true`, recreate, add the account, then close it again. Also hidden when `OIDC_DISABLE_PASSWORD_LOGIN=true`. |
 | `/api/health` is `503` | Process is up but SQLite failed. Check the volume mount and file permissions. |
 | Cannot pull `ghcr.io/xeiverse/genesis-lists` | The tag has not been published yet. Use `docker compose up -d --build` from a checkout of that version. |
+| OIDC container exits on start | Missing `OIDC_*` / `PUBLIC_BASE_URL`, or discovery unreachable from the container. See [Authentik guide](guides/oauth-authentik.md). |
+| OIDC returns to `/login?error=oidc` | Check redirect URI, username claim rules, and auto-register; inspect app logs. |

@@ -1,13 +1,25 @@
 # Security
 
-## Authentication model (MVP)
+## Authentication model
 
-- Local **username + password** accounts.
-- Passwords hashed with **argon2id** before storage; plaintext never logged or returned.
-- Sessions established on register/login via an **HTTP-only**, **signed** cookie (not accessible to JS). The cookie payload is a random session id; the server looks it up in the `sessions` table.
+- Local **username + password** accounts (optional when OIDC-only mode is enabled).
+- Passwords hashed with **argon2id** before storage; plaintext never logged or returned. OIDC-only users may have a null `password_hash`.
+- Sessions established on register/login/OIDC callback via an **HTTP-only**, **signed** cookie (not accessible to JS). The cookie payload is a random session id; the server looks it up in the `sessions` table.
 - Cookie is signed with `SESSION_SECRET`. `Secure` flag on when HTTPS / `COOKIE_SECURE=true`; `SameSite=Lax`.
-- Logout deletes the server-side session row and clears the cookie.
-- Changing a password deletes every other session for that user. The session that submitted the change stays signed in so Settings does not kick you out.
+- Logout deletes the server-side session row and clears the cookie. It does **not** call the IdP end-session endpoint in this release.
+- Changing a password deletes every other session for that user. The session that submitted the change stays signed in so Settings does not kick you out. Users without a password cannot use change-password.
+
+## OIDC
+
+- Authorization Code flow with PKCE; confidential client secret via `OIDC_CLIENT_SECRET`.
+- Authorization `state` (and PKCE verifier / nonce) stored server-side with a short TTL; callback rejects unknown, reused, or expired state.
+- Redirect URI is fixed to `{PUBLIC_BASE_URL}/api/auth/oidc/callback` or an explicit `OIDC_REDIRECT_URI` — never taken from user input.
+- IdP tokens are used only during the callback exchange; they are not persisted.
+- Username claims must match local username rules before merge or auto-register.
+- `OIDC_CLIENT_SECRET` and related secrets live in env; never commit them.
+- Startup fails if `OIDC_ENABLED=true` but discovery or required env is invalid.
+
+See [ADR 0005](adr/0005-oidc.md) and [guides/oauth-authentik.md](guides/oauth-authentik.md).
 
 ## Password & username policy
 
@@ -19,26 +31,28 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 - Fail closed: missing/invalid session → `401`.
 - Cross-user resource access → `404`.
 
-## Threat notes (MVP posture)
+## Threat notes
 
 | Threat | Mitigation |
 |--------|------------|
 | Password theft at rest | argon2id |
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
+| OIDC CSRF / replay | `state` + PKCE; one-time server-side state rows |
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
-| Secret leakage | `SESSION_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
+| Secret leakage | `SESSION_SECRET` / `OIDC_CLIENT_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
 | Open registration | `ALLOW_REGISTRATION` (see [self-hosting](06-self-hosting.md)). Unset/`bootstrap` closes after the first account. A public instance with registration open lets anyone create accounts |
 | Oversize payloads | 16 KiB JSON body limit |
 
-## Out of scope for MVP security features
+## Out of scope for this release
 
 - Email verification, 2FA, email-based password **reset** flows
-- OIDC / SSO
 - Fine-grained RBAC beyond owner isolation
 - Audit log UI
+- OIDC backchannel logout / IdP single logout
+- SAML
 
-Authenticated password **change** (current + new password) is in scope; see `POST /api/auth/change-password`.
+Authenticated password **change** (current + new password) remains in scope for users with a local password; see `POST /api/auth/change-password`.
 
 Operators should keep the instance private (VPN / auth proxy) if exposed to the public internet without additional hardening.

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simplified Receipt Long mark on primary green (brand #386a20 is the adaptive background). -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,28h40c2.2,0 4,1.8 4,4v48c0,1.1 -0.9,2 -2,2h-4l-4,-3l-4,3l-4,-3l-4,3l-4,-3l-4,3l-4,-3l-4,3h-4c-1.1,0 -2,-0.9 -2,-2V32c0,-2.2 1.8,-4 4,-4zM40,40h28v4H40v-4zM40,50h28v4H40v-4zM40,60h20v4H40v-4z" />
+</vector>

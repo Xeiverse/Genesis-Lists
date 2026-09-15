@@ -17,3 +17,8 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/local.properties
+*.apk
+*.aab

@@ -36,8 +36,10 @@ Follow-ups:
 
 ## Native clients
 
-- Reuse the same OpenAPI contract (generated clients).
-- Consider Flutter or React Native only after API stability.
+- **Android companion (in progress / shipped as debug client):** `apps/android/` — Kotlin, Jetpack Compose, cookie-session auth, Room offline **read** cache. See [ADR 0006](adr/0006-android-companion.md) and [`apps/android/README.md`](../apps/android/README.md).
+- Reuse the same OpenAPI contract (hand-mirrored DTOs today; generated clients optional later).
+- Follow-ups: sharing UI, in-app OIDC (custom-scheme redirects), offline writes, Play Store pipeline.
+- Consider Flutter or React Native only if a second platform is needed after the Android companion stabilizes.
 
 ## Other ideas
 

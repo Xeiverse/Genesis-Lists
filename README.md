@@ -6,14 +6,15 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 1.0.0. Sharing, OIDC, and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists` (see [Self-hosting](docs/06-self-hosting.md)).
+**Version:** 1.0.0 (sharing landing in Unreleased / 1.1.0). OIDC and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists` (see [Self-hosting](docs/06-self-hosting.md)).
 
-## Features (MVP)
+## Features
 
 - Multiple lists per user, with Keep-style preview cards and search
 - Add / edit / toggle / delete checklist items
 - Ticked items collect in a collapsible section with clear-all
-- Multi-user accounts with isolated data
+- Share lists with other accounts (owner picker; members can edit, not delete)
+- Multi-user accounts with isolated private data
 - Registration closes after the first account unless you leave it open
 - Change password from Settings (other sessions are signed out)
 - Material Design 3 responsive web UI
@@ -24,18 +25,19 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | Doc | Description |
 |-----|-------------|
 | [Vision](docs/00-vision.md) | Why Genesis Lists exists |
-| [Requirements](docs/01-requirements.md) | MVP user stories & acceptance criteria |
+| [Requirements](docs/01-requirements.md) | User stories & acceptance criteria |
 | [Architecture](docs/02-architecture.md) | System design |
-| [Data model](docs/03-data-model.md) | Entities & ownership |
+| [Data model](docs/03-data-model.md) | Entities, ownership & membership |
 | [API overview](docs/04-api.md) | Human API guide |
 | [OpenAPI](docs/openapi/openapi.yaml) | Machine-readable API contract |
 | [UI/UX](docs/05-ui-ux.md) | Material Design 3 screens & flows |
 | [Self-hosting](docs/06-self-hosting.md) | Deploy, HTTPS, backup, upgrade |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
-| [Roadmap](docs/08-roadmap.md) | Sharing, OIDC, PWA (post-MVP) |
+| [Roadmap](docs/08-roadmap.md) | OIDC, PWA, further sharing (roles/realtime) |
 | [ADRs](docs/adr/) | Architecture decisions |
-| [Acceptance checklist](docs/acceptance/mvp-checklist.md) | Verification checklist |
+| [MVP acceptance](docs/acceptance/mvp-checklist.md) | MVP verification checklist |
+| [Sharing acceptance](docs/acceptance/sharing-checklist.md) | Sharing verification checklist |
 
 ## Quick start (development)
 

@@ -24,6 +24,13 @@ export type ListRow = {
   updated_at: string;
 };
 
+export type ListMemberRow = {
+  list_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+};
+
 export type ItemRow = {
   id: string;
   list_id: string;
@@ -36,7 +43,7 @@ export type ItemRow = {
 
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -82,6 +89,12 @@ function migrate(db: Db) {
       `INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)`,
     ).run(new Date().toISOString());
   }
+  if (current < 2) {
+    applyMigration2(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)`,
+    ).run(new Date().toISOString());
+  }
 }
 
 /** Initial schema. Safe on databases created before schema_migrations existed. */
@@ -122,6 +135,21 @@ function applyMigration1(db: Db) {
     CREATE INDEX IF NOT EXISTS idx_lists_owner ON lists(owner_id);
     CREATE INDEX IF NOT EXISTS idx_items_list ON list_items(list_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+  `);
+}
+
+/** Shared lists: list_members with fixed member role. */
+function applyMigration2(db: Db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS list_members (
+      list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (list_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_list_members_user ON list_members(user_id);
   `);
 }
 

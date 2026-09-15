@@ -58,11 +58,17 @@ describe("schema migrations", () => {
     legacy.close();
 
     const db = createDb(dbPath);
-    assert.equal(getSchemaVersion(db), 1);
+    assert.equal(getSchemaVersion(db), SCHEMA_VERSION);
     const row = db
       .prepare(`SELECT username FROM users WHERE id = ?`)
       .get("user-1") as { username: string };
     assert.equal(row.username, "alice");
+    const members = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'list_members'`,
+      )
+      .get() as { name: string } | undefined;
+    assert.equal(members?.name, "list_members");
     db.close();
   });
 });

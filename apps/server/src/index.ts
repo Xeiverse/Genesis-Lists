@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { buildApp } from "./app.js";
+import { createOidcProvider, resolveOidcSettingsFromEnv } from "./oidc.js";
 import { resolveRegistrationMode, resolveSessionSecret } from "./util.js";
 
 function readAppVersion() {
@@ -33,6 +34,19 @@ if (registrationMode === "open") {
   );
 }
 
+const oidcSettings = resolveOidcSettingsFromEnv(process.env);
+let oidc = null;
+if (oidcSettings.enabled) {
+  try {
+    oidc = await createOidcProvider(oidcSettings);
+    console.log(`OIDC enabled (issuer discovery ok): ${oidcSettings.issuerUrl}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`OIDC startup failed: ${message}`);
+    process.exit(1);
+  }
+}
+
 const staticDir =
   process.env.STATIC_DIR ??
   path.join(process.cwd(), "..", "web", "dist");
@@ -44,6 +58,7 @@ const app = await buildApp({
   registrationMode,
   version: readAppVersion(),
   staticDir: process.env.NODE_ENV === "production" ? staticDir : undefined,
+  oidc,
 });
 
 await app.listen({ port, host: "0.0.0.0" });

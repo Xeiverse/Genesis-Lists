@@ -12,6 +12,8 @@ export function sendError(
 }
 
 export const SESSION_COOKIE = "genesis_session";
+/** Binds OIDC `state` to the browser that started login (login CSRF mitigation). */
+export const OIDC_STATE_COOKIE = "genesis_oidc_state";
 export const SESSION_DAYS = 30;
 export const BODY_LIMIT_BYTES = 16 * 1024;
 export const DEV_SESSION_SECRET = "dev-insecure-session-secret-change-me";

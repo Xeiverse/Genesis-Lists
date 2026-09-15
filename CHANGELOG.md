@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### OIDC
+
+- Optional OpenID Connect login (Authentik and compatible IdPs) via environment variables
+- Username merge links IdP users to existing local accounts; optional email from claims
+- `OIDC_DISABLE_PASSWORD_LOGIN` for IdP-only households
+- Schema version 3: nullable passwords, `user_identities`, OIDC login state
+
 ### Sharing
 
 - Share lists with other accounts via an Immich-style user picker (search + checkboxes)

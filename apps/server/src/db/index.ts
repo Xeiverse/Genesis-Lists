@@ -5,13 +5,30 @@ import path from "node:path";
 export type UserRow = {
   id: string;
   username: string;
-  password_hash: string;
+  password_hash: string | null;
+  email: string | null;
   created_at: string;
 };
 
 export type SessionRow = {
   id: string;
   user_id: string;
+  expires_at: string;
+  created_at: string;
+};
+
+export type UserIdentityRow = {
+  id: string;
+  user_id: string;
+  issuer: string;
+  subject: string;
+  created_at: string;
+};
+
+export type OidcLoginStateRow = {
+  state: string;
+  code_verifier: string;
+  nonce: string | null;
   expires_at: string;
   created_at: string;
 };
@@ -43,7 +60,7 @@ export type ItemRow = {
 
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -54,6 +71,7 @@ export function createDb(databasePath: string): Db {
   db.exec("PRAGMA foreign_keys = ON;");
   migrate(db);
   pruneExpiredSessions(db);
+  pruneExpiredOidcStates(db);
   return db;
 }
 
@@ -82,17 +100,22 @@ function migrate(db: Db) {
     );
   `);
 
-  const current = getSchemaVersion(db);
-  if (current < 1) {
+  if (getSchemaVersion(db) < 1) {
     applyMigration1(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)`,
     ).run(new Date().toISOString());
   }
-  if (current < 2) {
+  if (getSchemaVersion(db) < 2) {
     applyMigration2(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)`,
+    ).run(new Date().toISOString());
+  }
+  if (getSchemaVersion(db) < 3) {
+    applyMigration3(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)`,
     ).run(new Date().toISOString());
   }
 }
@@ -153,8 +176,66 @@ function applyMigration2(db: Db) {
   `);
 }
 
+/** OIDC: nullable password, email, identities, login state. */
+function applyMigration3(db: Db) {
+  db.exec("PRAGMA foreign_keys = OFF;");
+  db.exec("BEGIN;");
+  try {
+    db.exec(`
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY NOT NULL,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT,
+        email TEXT,
+        created_at TEXT NOT NULL
+      );
+
+      INSERT INTO users_new (id, username, password_hash, email, created_at)
+      SELECT id, username, password_hash, NULL, created_at FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      CREATE TABLE IF NOT EXISTS user_identities (
+        id TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        issuer TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        UNIQUE (issuer, subject)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_user_identities_user ON user_identities(user_id);
+
+      CREATE TABLE IF NOT EXISTS oidc_login_states (
+        state TEXT PRIMARY KEY NOT NULL,
+        code_verifier TEXT NOT NULL,
+        nonce TEXT,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+    db.exec("COMMIT;");
+  } catch (err) {
+    db.exec("ROLLBACK;");
+    throw err;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON;");
+  }
+}
+
 function pruneExpiredSessions(db: Db) {
   db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).run(
     new Date().toISOString(),
   );
+}
+
+function pruneExpiredOidcStates(db: Db) {
+  try {
+    db.prepare(`DELETE FROM oidc_login_states WHERE expires_at <= ?`).run(
+      new Date().toISOString(),
+    );
+  } catch {
+    // Table may not exist on partial migrate failure paths
+  }
 }

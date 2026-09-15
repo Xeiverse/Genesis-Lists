@@ -4,7 +4,9 @@
   "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "node --experimental-sqlite --import tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -19,6 +21,7 @@
     "@genesis-lists/shared": "workspace:*",
     "argon2": "^0.41.1",
     "fastify": "^5.2.0",
+    "openid-client": "^6.8.8",
     "zod": "^3.24.1"
   },
   "devDependencies": {

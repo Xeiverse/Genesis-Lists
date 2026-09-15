@@ -28,6 +28,12 @@ export function SettingsPage() {
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const canChangePassword = user?.authProviders.includes("local") ?? false;
+  const providersLabel =
+    user?.authProviders
+      .map((p) => (p === "local" ? "password" : "OIDC"))
+      .join(", ") ?? "";
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -77,50 +83,68 @@ export function SettingsPage() {
             <Typography variant="body2" color="text.secondary">
               Signed in as <strong>{user?.username}</strong>
             </Typography>
+            {user?.email ? (
+              <Typography variant="body2" color="text.secondary">
+                Email: {user.email}
+              </Typography>
+            ) : null}
+            {providersLabel ? (
+              <Typography variant="body2" color="text.secondary">
+                Sign-in methods: {providersLabel}
+              </Typography>
+            ) : null}
 
-            <Typography variant="subtitle1" fontWeight={600} pt={1}>
-              Change password
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              New password must be at least 8 characters.
-            </Typography>
+            {canChangePassword ? (
+              <>
+                <Typography variant="subtitle1" fontWeight={600} pt={1}>
+                  Change password
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  New password must be at least 8 characters.
+                </Typography>
 
-            {error && (
-              <Alert severity="error" onClose={() => setError(null)}>
-                {error}
+                {error && (
+                  <Alert severity="error" onClose={() => setError(null)}>
+                    {error}
+                  </Alert>
+                )}
+
+                <TextField
+                  label="Current password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="New password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <TextField
+                  label="Confirm new password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  fullWidth
+                />
+                <Button type="submit" disabled={submitting || !currentPassword || !newPassword}>
+                  Update password
+                </Button>
+              </>
+            ) : (
+              <Alert severity="info">
+                This account signs in with an identity provider. Password change is not available.
               </Alert>
             )}
-
-            <TextField
-              label="Current password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-              fullWidth
-            />
-            <TextField
-              label="New password"
-              type="password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              fullWidth
-            />
-            <TextField
-              label="Confirm new password"
-              type="password"
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              fullWidth
-            />
-            <Button type="submit" disabled={submitting || !currentPassword || !newPassword}>
-              Update password
-            </Button>
           </Stack>
         </Paper>
       </Container>

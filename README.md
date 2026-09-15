@@ -6,7 +6,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 1.0.0 (sharing landing in Unreleased / 1.1.0). OIDC and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists` (see [Self-hosting](docs/06-self-hosting.md)).
+**Version:** 1.0.0 (sharing and OIDC landing in Unreleased). Optional OIDC is documented under [Self-hosting](docs/06-self-hosting.md) and [Authentik OAuth](docs/guides/oauth-authentik.md). PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists`.
 
 ## Features
 
@@ -14,6 +14,7 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 - Add / edit / toggle / delete checklist items
 - Ticked items collect in a collapsible section with clear-all
 - Share lists with other accounts (owner picker; members can edit, not delete)
+- Optional OpenID Connect (Authentik and compatible IdPs)
 - Multi-user accounts with isolated private data
 - Registration closes after the first account unless you leave it open
 - Change password from Settings (other sessions are signed out)
@@ -32,12 +33,14 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | [OpenAPI](docs/openapi/openapi.yaml) | Machine-readable API contract |
 | [UI/UX](docs/05-ui-ux.md) | Material Design 3 screens & flows |
 | [Self-hosting](docs/06-self-hosting.md) | Deploy, HTTPS, backup, upgrade |
+| [Authentik OAuth](docs/guides/oauth-authentik.md) | OIDC setup with Authentik |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
-| [Roadmap](docs/08-roadmap.md) | OIDC, PWA, further sharing (roles/realtime) |
+| [Roadmap](docs/08-roadmap.md) | PWA, OIDC follow-ups, further sharing |
 | [ADRs](docs/adr/) | Architecture decisions |
 | [MVP acceptance](docs/acceptance/mvp-checklist.md) | MVP verification checklist |
 | [Sharing acceptance](docs/acceptance/sharing-checklist.md) | Sharing verification checklist |
+| [OIDC acceptance](docs/acceptance/oidc-checklist.md) | OIDC verification checklist |
 
 ## Quick start (development)
 

@@ -1,8 +1,10 @@
 import type {
+  AuthConfigDto,
   ListDto,
   ListItemDto,
   ListMemberDto,
   RegistrationStatusDto,
+  UserDirectoryDto,
   UserDto,
   ApiErrorBody,
 } from "@genesis-lists/shared";
@@ -49,6 +51,7 @@ export const api = {
     request<{ status: string; version: string; schemaVersion?: number }>("/api/health"),
   registration: () =>
     request<RegistrationStatusDto>("/api/auth/registration"),
+  authConfig: () => request<AuthConfigDto>("/api/auth/config"),
   me: () => request<UserDto>("/api/auth/me"),
   register: (username: string, password: string) =>
     request<UserDto>("/api/auth/register", {
@@ -66,7 +69,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
-  users: () => request<{ users: UserDto[] }>("/api/users"),
+  users: () => request<{ users: UserDirectoryDto[] }>("/api/users"),
   lists: () => request<{ lists: ListDto[] }>("/api/lists"),
   createList: (name: string) =>
     request<ListDto>("/api/lists", {

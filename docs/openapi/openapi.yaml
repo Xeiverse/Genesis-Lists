@@ -3,7 +3,7 @@ info:
   title: Genesis Lists API
   version: 1.0.0
   description: |
-    REST API for Genesis Lists. Session cookie authentication.
+    REST API for Genesis Lists. Session cookie authentication with optional OIDC.
     Includes shared lists (members). Spec is the source of truth — see docs/04-api.md.
 servers:
   - url: /
@@ -23,7 +23,7 @@ paths:
               example:
                 status: ok
                 version: "1.0.0"
-                schemaVersion: 2
+                schemaVersion: 3
         '503':
           description: Database unavailable
           content:
@@ -37,7 +37,10 @@ paths:
   /api/auth/registration:
     get:
       operationId: getRegistration
-      summary: Whether new accounts can be created
+      summary: Whether new password accounts can be created
+      description: >
+        Returns open=false when registration is closed by ALLOW_REGISTRATION
+        or when password login is disabled via OIDC_DISABLE_PASSWORD_LOGIN.
       tags: [Auth]
       responses:
         '200':
@@ -49,10 +52,32 @@ paths:
               example:
                 open: true
 
+  /api/auth/config:
+    get:
+      operationId: getAuthConfig
+      summary: Public auth configuration for the SPA
+      tags: [Auth]
+      responses:
+        '200':
+          description: Auth UI configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthConfig'
+              example:
+                registrationOpen: true
+                passwordLoginEnabled: true
+                oidc:
+                  enabled: false
+                  buttonText: Sign in with OIDC
+                  autoLaunch: false
+
   /api/auth/register:
     post:
       operationId: register
       summary: Register a new user and create a session
+      description: >
+        Returns 403 when registration is closed or password login is disabled.
       tags: [Auth]
       requestBody:
         required: true
@@ -86,6 +111,7 @@ paths:
     post:
       operationId: login
       summary: Log in and create a session
+      description: Returns 403 when password login is disabled.
       tags: [Auth]
       requestBody:
         required: true
@@ -108,6 +134,69 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/auth/oidc/start:
+    get:
+      operationId: startOidc
+      summary: Begin OIDC Authorization Code login
+      description: >
+        Redirects the browser to the IdP authorize URL. Returns 404 when OIDC is disabled.
+      tags: [Auth]
+      responses:
+        '302':
+          description: Redirect to the identity provider
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '503':
+          description: OIDC misconfigured or discovery unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+
+  /api/auth/oidc/callback:
+    get:
+      operationId: oidcCallback
+      summary: Complete OIDC login
+      description: >
+        Exchanges the authorization code, links or creates the local user, sets the
+        session cookie, and redirects to `/`. On failure redirects to `/login?error=oidc`.
+      tags: [Auth]
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to app home or login error
+          headers:
+            Location:
+              schema:
+                type: string
+              description: `/` on success or `/login?error=oidc` on failure
+            Set-Cookie:
+              schema:
+                type: string
+              description: Session cookie on success
 
   /api/auth/logout:
     post:
@@ -146,6 +235,7 @@ paths:
       description: |
         Updates the password hash. Other sessions for this user are deleted;
         the session that made this request stays signed in.
+        Returns 403 when the user has no local password (OIDC-only account).
       tags: [Auth]
       security:
         - sessionCookie: []
@@ -162,6 +252,8 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
 
   /api/users:
     get:
@@ -185,7 +277,7 @@ paths:
                   users:
                     type: array
                     items:
-                      $ref: '#/components/schemas/User'
+                      $ref: '#/components/schemas/UserDirectoryEntry'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
@@ -524,7 +616,7 @@ components:
         schemaVersion:
           type: integer
           minimum: 1
-          example: 2
+          example: 3
 
     HealthErrorResponse:
       type: object
@@ -541,6 +633,28 @@ components:
       required: [open]
       properties:
         open:
+          type: boolean
+
+    AuthConfig:
+      type: object
+      required: [registrationOpen, passwordLoginEnabled, oidc]
+      properties:
+        registrationOpen:
+          type: boolean
+        passwordLoginEnabled:
+          type: boolean
+        oidc:
+          $ref: '#/components/schemas/OidcPublicConfig'
+
+    OidcPublicConfig:
+      type: object
+      required: [enabled, buttonText, autoLaunch]
+      properties:
+        enabled:
+          type: boolean
+        buttonText:
+          type: string
+        autoLaunch:
           type: boolean
 
     ErrorBody:
@@ -592,7 +706,31 @@ components:
 
     User:
       type: object
+      required: [id, username, authProviders]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        authProviders:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [local, oidc]
+          description: >
+            How this account can authenticate. local means a password hash is set;
+            oidc means at least one linked identity exists.
+
+    UserDirectoryEntry:
+      type: object
       required: [id, username]
+      description: Share-picker directory entry from GET /api/users (no authProviders).
       properties:
         id:
           type: string

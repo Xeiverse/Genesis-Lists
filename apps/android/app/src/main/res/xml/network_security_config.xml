@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Prefer HTTPS. Cleartext is permitted so private-LAN self-hosts
+  (http://192.168.x.x, http://10.x.x.x, localhost) can be used during setup.
+  Do not expose Genesis Lists over cleartext on the public internet.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

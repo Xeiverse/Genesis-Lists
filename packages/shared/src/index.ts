@@ -73,6 +73,17 @@ export type AuthConfigDto = {
   oidc: OidcPublicConfigDto;
 };
 
+export type ListMemberDto = {
+  userId: string;
+  username: string;
+};
+
+export const putListMembersSchema = z.object({
+  userIds: z.array(z.string().uuid()),
+});
+
+export type PutListMembers = z.infer<typeof putListMembersSchema>;
+
 export type ListDto = {
   id: string;
   name: string;
@@ -80,6 +91,8 @@ export type ListDto = {
   updatedAt: string;
   previewItems: ListItemPreviewDto[];
   itemCount: number;
+  isOwner: boolean;
+  ownerUsername: string;
 };
 
 export type ListItemDto = {

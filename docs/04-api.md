@@ -43,24 +43,38 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 | GET | `/api/auth/me` | Yes | Current user `{ id, username, email?, authProviders }` |
 | POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions; current session stays. `403` if the user has no password |
 
+### Users
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/users` | Yes | Directory of all users `{ id, username }[]` for the share picker (self-host) |
+
 ### Lists
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by current user (includes `previewItems` up to 8 and `itemCount`) |
-| POST | `/api/lists` | Yes | Create list `{ "name": "..." }` |
-| PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` |
-| DELETE | `/api/lists/{id}` | Yes | Delete list + items |
+| GET | `/api/lists` | Yes | Lists owned by or shared with the current user (includes `previewItems` up to 8, `itemCount`, `isOwner`, `ownerUsername`) |
+| POST | `/api/lists` | Yes | Create list `{ "name": "..." }` (`isOwner: true`) |
+| PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` — owner or member |
+| DELETE | `/api/lists/{id}` | Yes | Delete list + items — **owner only**; member → `403` |
+
+### Members
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/lists/{id}/members` | Yes | Current members `{ userId, username }[]` — **owner only**; member → `403` |
+| PUT | `/api/lists/{id}/members` | Yes | Replace member set `{ "userIds": ["..."] }` — **owner only**. Rejects owner id or unknown ids (`400`). Empty array clears all members |
+| DELETE | `/api/lists/{id}/members/me` | Yes | Leave list — **member only**; owner → `400`; non-member / no access → `404` |
 
 ### Items
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists/{id}/items` | Yes | Items for a list (ordered by `position`) |
-| POST | `/api/lists/{id}/items` | Yes | Add item `{ "text": "..." }` |
-| PATCH | `/api/items/{id}` | Yes | Update `{ "text"?, "checked"?, "position"? }` |
-| DELETE | `/api/items/{id}` | Yes | Delete item |
-| DELETE | `/api/lists/{id}/items/checked` | Yes | Delete every ticked item on a list. `204` when owned, including when nothing is ticked (idempotent). No body. `404` if the list is missing or not owned |
+| GET | `/api/lists/{id}/items` | Yes | Items for a list (ordered by `position`) — owner or member |
+| POST | `/api/lists/{id}/items` | Yes | Add item `{ "text": "..." }` — owner or member |
+| PATCH | `/api/items/{id}` | Yes | Update `{ "text"?, "checked"?, "position"? }` — access via parent list |
+| DELETE | `/api/items/{id}` | Yes | Delete item — access via parent list |
+| DELETE | `/api/lists/{id}/items/checked` | Yes | Delete every ticked item on a list. `204` when accessible, including when nothing is ticked (idempotent). No body. `404` if the list is missing or not accessible |
 
 ### Health
 
@@ -75,3 +89,4 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 - `checked` is a boolean in JSON (mapped to 0/1 in SQLite).
 - Request bodies are JSON; `Content-Type: application/json`.
 - `authProviders` is an array of `"local"` and/or `"oidc"` indicating how the account can authenticate.
+- No access → `404`. Access without capability → `403`.

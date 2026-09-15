@@ -11,24 +11,24 @@ It is inspired by tools like Google Keep, but owned and operated by the people w
 1. **Self-host first** — One-command Docker deploy; data stays on your machine or server.
 2. **Simple by default** — Lists and checklist items; no feature sprawl in MVP.
 3. **Spec-driven** — Behavior is defined in `docs/` and OpenAPI before (and above) code.
-4. **Multi-user ready** — Isolated accounts from day one; sharing comes later with an explicit design.
+4. **Multi-user ready** — Isolated accounts from day one; sharing via an explicit member model.
 5. **Extensible auth later** — Local username/password now; OIDC (e.g. Authentik) on the roadmap.
 
 ## Personas
 
 | Persona | Needs |
 |---------|--------|
-| Household shopper | Quick add/check items on a phone while shopping |
+| Household shopper | Quick add/check items on a phone while shopping; share a list with the household |
 | Self-hoster | Reliable Docker deploy, backups, HTTPS behind a reverse proxy |
 | Open-source contributor | Clear specs, typed API, predictable monorepo |
 
-## Non-goals (MVP)
+## Non-goals (current product)
 
-- Shared or collaborative lists
+- Fine-grained viewer/editor roles (single `member` capability for now)
 - Third-party / OIDC authentication
 - Real-time multi-device sync beyond normal HTTP request/response
 - Offline-first PWA with conflict resolution
 - Native mobile or desktop apps
 - Rich notes, images, labels, reminders, or Keep-style boards
 
-See [Roadmap](08-roadmap.md) for planned post-MVP work.
+See [Roadmap](08-roadmap.md) for planned further work.

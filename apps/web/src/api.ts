@@ -2,6 +2,7 @@ import type {
   AuthConfigDto,
   ListDto,
   ListItemDto,
+  ListMemberDto,
   RegistrationStatusDto,
   UserDto,
   ApiErrorBody,
@@ -67,6 +68,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
+  users: () => request<{ users: UserDto[] }>("/api/users"),
   lists: () => request<{ lists: ListDto[] }>("/api/lists"),
   createList: (name: string) =>
     request<ListDto>("/api/lists", {
@@ -80,6 +82,15 @@ export const api = {
     }),
   deleteList: (id: string) =>
     request<void>(`/api/lists/${id}`, { method: "DELETE" }),
+  listMembers: (listId: string) =>
+    request<{ members: ListMemberDto[] }>(`/api/lists/${listId}/members`),
+  setListMembers: (listId: string, userIds: string[]) =>
+    request<{ members: ListMemberDto[] }>(`/api/lists/${listId}/members`, {
+      method: "PUT",
+      body: JSON.stringify({ userIds }),
+    }),
+  leaveList: (listId: string) =>
+    request<void>(`/api/lists/${listId}/members/me`, { method: "DELETE" }),
   items: (listId: string) =>
     request<{ items: ListItemDto[] }>(`/api/lists/${listId}/items`),
   createItem: (listId: string, text: string) =>

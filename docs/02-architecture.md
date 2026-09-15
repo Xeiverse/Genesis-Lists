@@ -21,7 +21,7 @@ flowchart TB
 | Component | Responsibility |
 |-----------|----------------|
 | **Web (React + Vite + MUI)** | Auth screens, lists home, list detail; Material Design 3 |
-| **API (Fastify)** | REST under `/api`; session auth; optional OIDC start/callback; ownership checks |
+| **API (Fastify)** | REST under `/api`; session auth; optional OIDC start/callback; ownership and membership checks |
 | **SQLite** | Persistent storage on a mounted volume |
 | **OIDC IdP (optional)** | Authentik or compatible provider; Authorization Code + PKCE |
 | **Static hosting** | Production server serves built SPA assets (including the application icon and web manifest) and API together |
@@ -29,7 +29,7 @@ flowchart TB
 ## Trust boundaries
 
 - Unauthenticated clients may only call register (when open and password login enabled), login (when password login enabled), registration status, auth config, health, and OIDC start/callback (when OIDC enabled).
-- Authenticated session cookie identifies the user; every list/item operation is scoped to that user.
+- Authenticated session cookie identifies the user; list/item operations require ownership or membership.
 - The IdP is trusted for identity claims after a successful code exchange; Genesis Lists maps claims to a local `users` row and never stores IdP access/refresh tokens long-term.
 - The database file must not be exposed over HTTP; only the app process reads/writes it.
 
@@ -52,6 +52,6 @@ This avoids CORS in the default self-host setup. Local development may use a Vit
 ## Extension points
 
 - Auth provider: local password and/or OIDC ([ADR 0005](adr/0005-oidc.md))
-- `list_members` table for sharing without rewriting core list/item shapes (roadmap)
+- Finer roles on `list_members` (viewer/editor) without rewriting core list/item shapes
 
 See ADRs under [`adr/`](adr/) for stack choices.

@@ -41,6 +41,13 @@ export type ListRow = {
   updated_at: string;
 };
 
+export type ListMemberRow = {
+  list_id: string;
+  user_id: string;
+  role: string;
+  created_at: string;
+};
+
 export type ItemRow = {
   id: string;
   list_id: string;
@@ -53,7 +60,7 @@ export type ItemRow = {
 
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -93,8 +100,7 @@ function migrate(db: Db) {
     );
   `);
 
-  const current = getSchemaVersion(db);
-  if (current < 1) {
+  if (getSchemaVersion(db) < 1) {
     applyMigration1(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)`,
@@ -104,6 +110,12 @@ function migrate(db: Db) {
     applyMigration2(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)`,
+    ).run(new Date().toISOString());
+  }
+  if (getSchemaVersion(db) < 3) {
+    applyMigration3(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)`,
     ).run(new Date().toISOString());
   }
 }
@@ -149,8 +161,23 @@ function applyMigration1(db: Db) {
   `);
 }
 
-/** OIDC: nullable password, email, identities, login state. */
+/** Shared lists: list_members with fixed member role. */
 function applyMigration2(db: Db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS list_members (
+      list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (list_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_list_members_user ON list_members(user_id);
+  `);
+}
+
+/** OIDC: nullable password, email, identities, login state. */
+function applyMigration3(db: Db) {
   db.exec("PRAGMA foreign_keys = OFF;");
   db.exec("BEGIN;");
   try {

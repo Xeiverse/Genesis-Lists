@@ -27,9 +27,18 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 
 ## Authorization
 
-- Every list/item operation checks ownership.
+- List/item operations require the authenticated user to be the **owner** or a **member** (`list_members`).
+- **Owner-only** capabilities: delete list, get/put members.
+- **Member** capabilities: read/write items, rename, leave list (`DELETE .../members/me`).
 - Fail closed: missing/invalid session → `401`.
-- Cross-user resource access → `404`.
+- No access (not owner, not member) → `404` (no existence leak).
+- Access without capability (e.g. member deletes list) → `403 FORBIDDEN`.
+
+## User directory
+
+- `GET /api/users` returns every account’s `id` and `username` to any signed-in user.
+- Intended for household / small self-host installs so the share dialog can list people to tick.
+- Do not expose a public Genesis Lists instance without understanding that all usernames are visible to every account.
 
 ## Threat notes
 
@@ -44,11 +53,12 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Secret leakage | `SESSION_SECRET` / `OIDC_CLIENT_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
 | Open registration | `ALLOW_REGISTRATION` (see [self-hosting](06-self-hosting.md)). Unset/`bootstrap` closes after the first account. A public instance with registration open lets anyone create accounts |
 | Oversize payloads | 16 KiB JSON body limit |
+| Username enumeration via directory | Accepted for self-host sharing UX; keep instances private if that is unacceptable |
 
-## Out of scope for this release
+## Out of scope for current security features
 
 - Email verification, 2FA, email-based password **reset** flows
-- Fine-grained RBAC beyond owner isolation
+- Fine-grained RBAC beyond owner vs single `member` role
 - Audit log UI
 - OIDC backchannel logout / IdP single logout
 - SAML

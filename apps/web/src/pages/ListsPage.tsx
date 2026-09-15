@@ -33,6 +33,7 @@ import type { ListDto } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
+import { ShareListDialog } from "../ShareListDialog";
 
 export function ListsPage() {
   const { user, logout } = useAuth();
@@ -46,6 +47,8 @@ export function ListsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [active, setActive] = useState<ListDto | null>(null);
 
@@ -108,6 +111,18 @@ export function ListsPage() {
       setActive(null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Delete failed");
+    }
+  }
+
+  async function handleLeave() {
+    if (!active) return;
+    try {
+      await api.leaveList(active.id);
+      setLists((prev) => prev.filter((l) => l.id !== active.id));
+      setLeaveOpen(false);
+      setActive(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Leave failed");
     }
   }
 
@@ -222,6 +237,16 @@ export function ListsPage() {
                       <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                         {list.name}
                       </Typography>
+                      {!list.isOwner && (
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          display="block"
+                          sx={{ mb: 0.75 }}
+                        >
+                          Shared by {list.ownerUsername}
+                        </Typography>
+                      )}
                       {list.previewItems.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
                           Empty list
@@ -310,14 +335,35 @@ export function ListsPage() {
         >
           Rename
         </MenuItem>
-        <MenuItem
-          onClick={() => {
-            setMenuAnchor(null);
-            setDeleteOpen(true);
-          }}
-        >
-          Delete
-        </MenuItem>
+        {active?.isOwner ? (
+          <>
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null);
+                setShareOpen(true);
+              }}
+            >
+              Share
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null);
+                setDeleteOpen(true);
+              }}
+            >
+              Delete
+            </MenuItem>
+          </>
+        ) : (
+          <MenuItem
+            onClick={() => {
+              setMenuAnchor(null);
+              setLeaveOpen(true);
+            }}
+          >
+            Leave list
+          </MenuItem>
+        )}
       </Menu>
 
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} fullWidth maxWidth="xs">
@@ -380,6 +426,32 @@ export function ListsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={leaveOpen} onClose={() => setLeaveOpen(false)}>
+        <DialogTitle>Leave list?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You will lose access to “{active?.name}” until the owner shares it with you again.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button variant="text" onClick={() => setLeaveOpen(false)}>
+            Cancel
+          </Button>
+          <Button color="error" onClick={() => void handleLeave()}>
+            Leave
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <ShareListDialog
+        open={shareOpen}
+        listId={active?.id ?? null}
+        ownerUsername={active?.ownerUsername ?? user?.username ?? ""}
+        ownerUserId={user?.id}
+        onClose={() => setShareOpen(false)}
+        onError={setError}
+      />
 
       <Snackbar open={Boolean(error)} autoHideDuration={4000} onClose={() => setError(null)}>
         <Alert severity="error" onClose={() => setError(null)}>

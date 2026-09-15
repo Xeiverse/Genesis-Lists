@@ -1,11 +1,20 @@
 # Changelog
 
-## 1.1.0
+## Unreleased
+
+### OIDC
 
 - Optional OpenID Connect login (Authentik and compatible IdPs) via environment variables
 - Username merge links IdP users to existing local accounts; optional email from claims
 - `OIDC_DISABLE_PASSWORD_LOGIN` for IdP-only households
-- Schema version 2: nullable passwords, `user_identities`, OIDC login state
+- Schema version 3: nullable passwords, `user_identities`, OIDC login state
+
+### Sharing
+
+- Share lists with other accounts via an Immich-style user picker (search + checkboxes)
+- Members can read/write items and rename; only the owner can delete the list or manage members
+- Members can leave a shared list
+- `GET /api/users` directory for the share picker; schema version 2 (`list_members`)
 
 ## 1.0.0
 

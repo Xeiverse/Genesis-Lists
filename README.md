@@ -6,14 +6,16 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 1.0.0. Optional OIDC (Authentik and compatible IdPs) is documented under [Self-hosting](docs/06-self-hosting.md) and [Authentik OAuth](docs/guides/oauth-authentik.md). Sharing and PWA remain on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists`.
+**Version:** 1.0.0 (sharing and OIDC landing in Unreleased). Optional OIDC is documented under [Self-hosting](docs/06-self-hosting.md) and [Authentik OAuth](docs/guides/oauth-authentik.md). PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v1.0.0` release publishes `ghcr.io/xeiverse/genesis-lists`.
 
-## Features (MVP)
+## Features
 
 - Multiple lists per user, with Keep-style preview cards and search
 - Add / edit / toggle / delete checklist items
 - Ticked items collect in a collapsible section with clear-all
-- Multi-user accounts with isolated data
+- Share lists with other accounts (owner picker; members can edit, not delete)
+- Optional OpenID Connect (Authentik and compatible IdPs)
+- Multi-user accounts with isolated private data
 - Registration closes after the first account unless you leave it open
 - Change password from Settings (other sessions are signed out)
 - Material Design 3 responsive web UI
@@ -24,9 +26,9 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | Doc | Description |
 |-----|-------------|
 | [Vision](docs/00-vision.md) | Why Genesis Lists exists |
-| [Requirements](docs/01-requirements.md) | MVP user stories & acceptance criteria |
+| [Requirements](docs/01-requirements.md) | User stories & acceptance criteria |
 | [Architecture](docs/02-architecture.md) | System design |
-| [Data model](docs/03-data-model.md) | Entities & ownership |
+| [Data model](docs/03-data-model.md) | Entities, ownership & membership |
 | [API overview](docs/04-api.md) | Human API guide |
 | [OpenAPI](docs/openapi/openapi.yaml) | Machine-readable API contract |
 | [UI/UX](docs/05-ui-ux.md) | Material Design 3 screens & flows |
@@ -34,9 +36,10 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | [Authentik OAuth](docs/guides/oauth-authentik.md) | OIDC setup with Authentik |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
-| [Roadmap](docs/08-roadmap.md) | Sharing, PWA, OIDC follow-ups |
+| [Roadmap](docs/08-roadmap.md) | PWA, OIDC follow-ups, further sharing |
 | [ADRs](docs/adr/) | Architecture decisions |
 | [MVP acceptance](docs/acceptance/mvp-checklist.md) | MVP verification checklist |
+| [Sharing acceptance](docs/acceptance/sharing-checklist.md) | Sharing verification checklist |
 | [OIDC acceptance](docs/acceptance/oidc-checklist.md) | OIDC verification checklist |
 
 ## Quick start (development)

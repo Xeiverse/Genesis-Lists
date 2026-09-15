@@ -195,8 +195,11 @@ export function ShareListDialog({
                         <Checkbox
                           edge="end"
                           checked={checked}
-                          tabIndex={-1}
-                          disableRipple
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            toggleUser(u.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
                           inputProps={{
                             "aria-label": `Share with ${u.username}`,
                           }}

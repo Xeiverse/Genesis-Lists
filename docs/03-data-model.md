@@ -137,7 +137,7 @@ Applied schema versions are stored in `schema_migrations(version, applied_at)`. 
 
 Migration 4 rebuilds `users`. A pre-v4 account is carried over only if an email address can be recovered for it:
 
-- The username is used when it is already a valid address, so password logins keep working. Otherwise the v3 `email` column is used, which rescues accounts auto-registered from an IdP under a bare username.
+- The username is used when it is already a valid address, so password logins keep working. Pre-v4 usernames were restricted to `[a-zA-Z0-9_-]`, so this only applies to a hand-edited database. Otherwise the v3 `email` column is used, which rescues accounts that signed in through an IdP. In practice that means local password accounts are removed and IdP-linked accounts survive.
 - For a carried-over account, `email` is that address trimmed and lower-cased, `name` is the email local part, and `password_hash` and `created_at` are unchanged. Lists, items, memberships, sessions, and identity rows survive.
 - Any other account is **deleted**, together with the lists it owns (and those lists' items and memberships), its memberships of other people's lists, its sessions, and its identity rows. The migration logs a warning naming the removed accounts.
 - If two accounts resolve to the same email, the oldest `created_at` wins and the others are removed as above.

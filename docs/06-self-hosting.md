@@ -148,18 +148,33 @@ On startup the app applies numbered schema steps and records them in `schema_mig
 ### Upgrading to schema version 4 deletes non-email accounts
 
 > **Back up `app.db` before this upgrade.** There is no automatic rollback and no downgrade path.
+>
+> **In practice this removes every local password account.** Usernames were restricted to `[a-zA-Z0-9_-]`, so no username created through the app can be a valid email address. Unless an account had an email stored on it by a previous OIDC login, it will be deleted along with its lists. Plan on recreating accounts and lists by hand.
 
 Accounts are now identified by email address instead of username ([ADR 0006](adr/0006-email-login-identifier.md)). When the server first starts on this version it rewrites the `users` table:
 
-- An account whose username is already a valid email address is kept, using that address. An account with a non-email username is still kept if an IdP previously stored an email address on it, using that address instead. Either way the display name becomes the part before the `@`, and the password, lists, shares, and sessions are untouched.
+- An account is kept if an email address can be recovered for it: its username when that is already a valid address (only possible in a hand-edited database, given the old username rules), otherwise an address a previous OIDC login stored on it. The display name becomes the part before the `@`, and the password, lists, shares, and sessions are untouched.
 - **Every other account is deleted**, along with the lists it owns, the items on those lists, its memberships of other people's lists, and its sessions. Those people must register again with an email address, and their lists must be recreated.
 - If two accounts resolve to the same address, the older one is kept and the newer ones are deleted.
+
+If losing that data is not acceptable, export what you need before upgrading, or add the addresses yourself first. Setting each user's `email` column to the address they should own is enough for the migration to keep them:
+
+```bash
+sqlite3 app.db "UPDATE users SET email = 'alice@example.com' WHERE username = 'alice';"
+```
 - The server logs a warning naming each removed account.
 
 Check the log after the upgrade:
 
 ```bash
 docker compose logs genesis-lists | grep "Schema v4"
+```
+
+Expect a line naming each removed account, for example:
+
+```
+Schema v4: removed 2 account(s) that could not be migrated to email login, with
+their lists and shares: alice (no valid email address), bob (no valid email address)
 ```
 
 If you need the old data, stop the container, restore your backup, and export what you need before retrying. To preview the damage first, list the accounts with no usable address:

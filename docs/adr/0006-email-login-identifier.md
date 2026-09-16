@@ -22,7 +22,7 @@ Second, a username is a second credential to invent and remember for an app that
 
 ## Consequences
 
-- Upgrading is a breaking change for any instance whose users are not named by email. Operators must back up `genesis.db` first and recreate those accounts. The migration logs the addresses it removed.
+- Upgrading is a breaking change for any instance whose users are not named by email. Because pre-v4 usernames were restricted to `[a-zA-Z0-9_-]`, no username created through the app can be an address, so in practice every local password account is removed and only IdP-linked accounts survive. Operators must back up the database first, and can rescue accounts by writing the right address into each `users.email` before upgrading. The migration logs the accounts it removed.
 - An instance that adopts an IdP later links automatically: a local account with the same email is claimed by the matching IdP account on first OIDC login.
 - That automatic link means the IdP is trusted to assert email ownership. An IdP that lets a user set an arbitrary unverified email can take over a local account. The `email_verified: false` check is a partial mitigation; operators should only connect IdPs they control ([07-security.md](../07-security.md)).
 - The directory now leaks display names rather than login identifiers, which is a smaller enumeration surface than either usernames or emails were.

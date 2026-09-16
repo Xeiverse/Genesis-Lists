@@ -7,8 +7,25 @@ export const emailSchema = z
   .toLowerCase()
   .pipe(z.string().email().max(254));
 
+/**
+ * Control characters and bidi overrides, which let one display name render as
+ * another in the share picker. Names are not unique, so the rendered form is
+ * all a sharer has to go on.
+ */
+const UNSAFE_NAME_CHARS = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+export const DISPLAY_NAME_UNSAFE_CHARS_MESSAGE =
+  "Display name may not contain control or text-direction characters.";
+
 /** Display name shown to other users. Not unique. */
-export const displayNameSchema = z.string().trim().min(1).max(64);
+export const displayNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .refine((v) => !UNSAFE_NAME_CHARS.test(v), {
+    message: DISPLAY_NAME_UNSAFE_CHARS_MESSAGE,
+  });
 
 export const passwordSchema = z.string().min(8).max(128);
 
@@ -84,10 +101,15 @@ export type UserDto = {
   authProviders: AuthProvider[];
 };
 
-/** Directory entry for the share picker (`GET /api/users`). Never carries emails. */
+/**
+ * Directory entry for the share picker (`GET /api/users`). Display names are not
+ * unique, so the address is what tells two people apart. Omitted when the
+ * operator sets `DIRECTORY_SHOW_EMAILS=false`.
+ */
 export type UserDirectoryDto = {
   id: string;
   name: string;
+  email?: string;
 };
 
 export type OidcPublicConfigDto = {

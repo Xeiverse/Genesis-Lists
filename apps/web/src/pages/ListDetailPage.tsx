@@ -614,7 +614,7 @@ export function ListDetailPage() {
         open={shareOpen}
         listId={id}
         ownerName={ownerName || user?.name || ""}
-        ownerUserId={user?.id}
+        currentUserId={user?.id}
         onClose={() => setShareOpen(false)}
         onError={setError}
       />

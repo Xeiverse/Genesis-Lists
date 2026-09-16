@@ -33,6 +33,11 @@ function isWeakSessionSecret(secret: string): boolean {
   );
 }
 
+export function envFlag(raw: string | undefined, defaultValue: boolean): boolean {
+  if (raw === undefined || raw.trim() === "") return defaultValue;
+  return raw.trim().toLowerCase() === "true";
+}
+
 export type RegistrationMode = "open" | "closed" | "bootstrap";
 
 /** Empty and `bootstrap` match an unset env var (first account, then closed). */

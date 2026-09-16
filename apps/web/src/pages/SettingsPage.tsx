@@ -15,7 +15,10 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { displayNameSchema } from "@genesis-lists/shared";
+import {
+  DISPLAY_NAME_UNSAFE_CHARS_MESSAGE,
+  displayNameSchema,
+} from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 
@@ -46,7 +49,11 @@ export function SettingsPage() {
 
     const parsed = displayNameSchema.safeParse(name);
     if (!parsed.success) {
-      setNameError("Display name must be 1–64 characters.");
+      setNameError(
+        parsed.error.issues[0]?.code === "custom"
+          ? DISPLAY_NAME_UNSAFE_CHARS_MESSAGE
+          : "Display name must be 1–64 characters.",
+      );
       return;
     }
 

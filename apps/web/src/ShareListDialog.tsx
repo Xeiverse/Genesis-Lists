@@ -27,7 +27,8 @@ type ShareListDialogProps = {
   open: boolean;
   listId: string | null;
   ownerName: string;
-  ownerUserId?: string;
+  /** The dialog is only reachable for lists the caller owns, so this is the owner. */
+  currentUserId?: string;
   onClose: () => void;
   onError: (message: string) => void;
 };
@@ -36,7 +37,7 @@ export function ShareListDialog({
   open,
   listId,
   ownerName,
-  ownerUserId,
+  currentUserId,
   onClose,
   onError,
 }: ShareListDialogProps) {
@@ -46,7 +47,7 @@ export function ShareListDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [resolvedOwnerId, setResolvedOwnerId] = useState<string | undefined>(
-    ownerUserId,
+    currentUserId,
   );
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export function ShareListDialog({
         if (cancelled) return;
         setUsers(usersRes.users);
         // Display names are not unique, so the owner can only be matched by id.
-        setResolvedOwnerId(ownerUserId);
+        setResolvedOwnerId(currentUserId);
         setSelected(new Set(membersRes.members.map((m) => m.userId)));
       } catch (e) {
         if (!cancelled) {
@@ -82,18 +83,26 @@ export function ShareListDialog({
     };
     // Intentionally omit onClose/onError — callers pass inline lambdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, listId, ownerUserId]);
+  }, [open, listId, currentUserId]);
 
   const otherUsers = useMemo(() => {
     return users
       .filter((u) => u.id !== resolvedOwnerId)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          (a.email ?? "").localeCompare(b.email ?? ""),
+      );
   }, [users, resolvedOwnerId]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return otherUsers;
-    return otherUsers.filter((u) => u.name.toLowerCase().includes(q));
+    return otherUsers.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.email?.toLowerCase().includes(q) ?? false),
+    );
   }, [otherUsers, query]);
 
   function toggleUser(userId: string) {
@@ -189,7 +198,7 @@ export function ShareListDialog({
                             {u.name[0]?.toUpperCase() ?? "?"}
                           </Avatar>
                         </ListItemAvatar>
-                        <ListItemText primary={u.name} />
+                        <ListItemText primary={u.name} secondary={u.email} />
                         <Checkbox
                           edge="end"
                           checked={checked}
@@ -199,7 +208,9 @@ export function ShareListDialog({
                           }}
                           onClick={(e) => e.stopPropagation()}
                           inputProps={{
-                            "aria-label": `Share with ${u.name}`,
+                            "aria-label": u.email
+                              ? `Share with ${u.name} (${u.email})`
+                              : `Share with ${u.name}`,
                           }}
                         />
                       </ListItemButton>

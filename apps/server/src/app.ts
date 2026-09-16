@@ -20,6 +20,7 @@ export type AppConfig = {
   registrationMode?: RegistrationMode;
   version?: string;
   oidc?: OidcProvider | null;
+  directoryShowEmails?: boolean;
 };
 
 async function buildFastify(config: AppConfig) {
@@ -94,7 +95,9 @@ async function buildFastify(config: AppConfig) {
     registrationMode: config.registrationMode ?? "bootstrap",
     oidc: config.oidc ?? null,
   });
-  await registerListRoutes(app, db);
+  await registerListRoutes(app, db, {
+    directoryShowEmails: config.directoryShowEmails ?? true,
+  });
 
   if (config.staticDir && fs.existsSync(config.staticDir)) {
     await app.register(fastifyStatic, {

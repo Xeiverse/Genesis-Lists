@@ -13,6 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import {
+  DISPLAY_NAME_UNSAFE_CHARS_MESSAGE,
   displayNameSchema,
   emailSchema,
   passwordSchema,
@@ -34,9 +35,12 @@ function emailErrorMessage(value: string): string | null {
 
 function nameErrorMessage(value: string): string | null {
   if (value.trim() === "") return null;
-  return displayNameSchema.safeParse(value).success
-    ? null
-    : "Display name must be at most 64 characters.";
+  const result = displayNameSchema.safeParse(value);
+  if (result.success) return null;
+  if (result.error.issues[0]?.code === "custom") {
+    return DISPLAY_NAME_UNSAFE_CHARS_MESSAGE;
+  }
+  return "Display name must be at most 64 characters.";
 }
 
 function passwordErrorMessage(value: string): string | null {

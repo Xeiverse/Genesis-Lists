@@ -2,7 +2,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { buildApp } from "./app.js";
 import { createOidcProvider, resolveOidcSettingsFromEnv } from "./oidc.js";
-import { resolveRegistrationMode, resolveSessionSecret } from "./util.js";
+import { envFlag, resolveRegistrationMode, resolveSessionSecret } from "./util.js";
 
 function readAppVersion() {
   const fromEnv = process.env.APP_VERSION?.trim();
@@ -59,6 +59,7 @@ const app = await buildApp({
   version: readAppVersion(),
   staticDir: process.env.NODE_ENV === "production" ? staticDir : undefined,
   oidc,
+  directoryShowEmails: envFlag(process.env.DIRECTORY_SHOW_EMAILS, true),
 });
 
 await app.listen({ port, host: "0.0.0.0" });

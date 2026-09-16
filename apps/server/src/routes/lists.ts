@@ -173,17 +173,27 @@ function userCanAccessItem(
   return row;
 }
 
-export async function registerListRoutes(app: FastifyInstance, db: Db) {
+export async function registerListRoutes(
+  app: FastifyInstance,
+  db: Db,
+  opts: { directoryShowEmails: boolean } = { directoryShowEmails: true },
+) {
   app.get("/api/users", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
 
+    // Display names are not unique, so email breaks the tie in the ordering
+    // just as it does in the picker.
     const rows = db
-      .prepare(`SELECT id, name FROM users ORDER BY name ASC`)
-      .all() as Array<{ id: string; name: string }>;
+      .prepare(`SELECT id, name, email FROM users ORDER BY name ASC, email ASC`)
+      .all() as Array<{ id: string; name: string; email: string }>;
 
     return reply.send({
-      users: rows.map((r) => ({ id: r.id, name: r.name })),
+      users: rows.map((r) =>
+        opts.directoryShowEmails
+          ? { id: r.id, name: r.name, email: r.email }
+          : { id: r.id, name: r.name },
+      ),
     });
   });
 

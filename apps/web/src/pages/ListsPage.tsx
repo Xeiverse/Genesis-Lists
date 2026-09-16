@@ -448,7 +448,7 @@ export function ListsPage() {
         open={shareOpen}
         listId={active?.id ?? null}
         ownerName={active?.ownerName ?? user?.name ?? ""}
-        ownerUserId={user?.id}
+        currentUserId={user?.id}
         onClose={() => setShareOpen(false)}
         onError={setError}
       />

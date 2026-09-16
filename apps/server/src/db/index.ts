@@ -1,7 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import { displayNameFromEmail, emailSchema } from "@genesis-lists/shared";
+import {
+  displayNameFromEmail,
+  displayNameSchema,
+  emailSchema,
+} from "@genesis-lists/shared";
 
 export type UserRow = {
   id: string;
@@ -82,6 +86,18 @@ export function getSchemaVersion(db: Db): number {
     .get() as { version: number | bigint | null };
   if (row.version == null) return 0;
   return Number(row.version);
+}
+
+/** `SQLITE_CONSTRAINT_UNIQUE`. Lets a racing insert report the same conflict a pre-check would. */
+const SQLITE_CONSTRAINT_UNIQUE = 2067;
+
+export function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const { errcode, message } = err as { errcode?: number; message?: string };
+  return (
+    errcode === SQLITE_CONSTRAINT_UNIQUE ||
+    (typeof message === "string" && message.includes("UNIQUE constraint failed"))
+  );
 }
 
 export function dbIsReady(db: Db): boolean {
@@ -241,6 +257,17 @@ function firstValidEmail(...candidates: Array<string | null>): string | null {
 }
 
 /**
+ * The username is the name people already knew the account by, so it is kept
+ * where it can be. When the username is itself an address, using it would put
+ * the address in the display name, so the local part is used instead.
+ */
+function migratedDisplayName(username: string, email: string): string {
+  if (emailSchema.safeParse(username).success) return displayNameFromEmail(email);
+  const parsed = displayNameSchema.safeParse(username);
+  return parsed.success ? parsed.data : displayNameFromEmail(email);
+}
+
+/**
  * Email login identity (ADR 0006). Destructive: accounts that cannot be given an
  * email address are removed along with everything they own.
  */
@@ -286,7 +313,7 @@ function applyMigration4(db: Db) {
     keep.push({
       id: row.id,
       email,
-      name: displayNameFromEmail(email),
+      name: migratedDisplayName(row.username, email),
       password_hash: row.password_hash,
       created_at: row.created_at,
     });

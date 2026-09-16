@@ -192,6 +192,9 @@ describe("schema version 4 (email login identity)", () => {
     user.run("carol", "carol", null, "Carol@Example.com", "2026-01-03T00:00:00.000Z");
     // Resolves to the same address as alice: the older account wins.
     user.run("alias", "alice@example.com", "alias-hash", null, "2026-01-04T00:00:00.000Z");
+    // Bare username that does not match its address: the username is the name
+    // everyone already knew, so it survives as the display name.
+    user.run("dave", "dave_smith", null, "robert@example.com", "2026-01-05T00:00:00.000Z");
 
     const list = legacy.prepare(
       `INSERT INTO lists (id, owner_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
@@ -255,6 +258,20 @@ describe("schema version 4 (email login identity)", () => {
     assert.equal(
       count(db, `SELECT COUNT(*) AS n FROM user_identities WHERE user_id = 'carol'`),
       1,
+    );
+    db.close();
+  });
+
+  it("keeps the old username as the display name when it is not itself an address", () => {
+    const db = seed();
+    const row = db
+      .prepare(`SELECT email, name FROM users WHERE id = 'dave'`)
+      .get() as { email: string; name: string } | undefined;
+    assert.equal(row?.email, "robert@example.com");
+    assert.equal(
+      row?.name,
+      "dave_smith",
+      "an account rescued by its IdP address should not be renamed",
     );
     db.close();
   });

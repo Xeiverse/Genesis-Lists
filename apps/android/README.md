@@ -2,6 +2,8 @@
 
 Native Kotlin / Jetpack Compose client for a **self-hosted** Genesis Lists server.
 
+Application id / namespace: `uk.co.xeiverse.genesislists`.
+
 ## Requirements
 
 - JDK 17+

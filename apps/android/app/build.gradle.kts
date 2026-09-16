@@ -7,11 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.genesislists.android"
+    namespace = "uk.co.xeiverse.genesislists"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.genesislists.android"
+        applicationId = "uk.co.xeiverse.genesislists"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

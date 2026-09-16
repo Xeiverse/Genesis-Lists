@@ -172,6 +172,26 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(res.json().error.code, "CONFLICT");
   });
 
+  await it("racing registrations for one email conflict rather than crash", async () => {
+    const [first, second] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "race@example.com", password: "password1" },
+      }),
+      app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "race@example.com", password: "password1" },
+      }),
+    ]);
+
+    const codes = [first.statusCode, second.statusCode].sort();
+    assert.deepEqual(codes, [201, 409]);
+    const loser = first.statusCode === 409 ? first : second;
+    assert.equal(loser.json().error.code, "CONFLICT");
+  });
+
   await it("email case and surrounding space do not make a second account", async () => {
     const res = await app.inject({
       method: "POST",
@@ -255,6 +275,39 @@ describe("Genesis Lists API contract", async () => {
       payload: { name: "alice" },
     });
     assert.equal(restore.statusCode, 200);
+  });
+
+  await it("display names may not carry control or bidi characters", async () => {
+    // Names are not unique, so a name that renders as someone else's is a
+    // mis-sharing risk in the picker.
+    for (const name of ["bob\nadmin", "alice\u202ebob", "carol\u2066x"]) {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/auth/me",
+        headers: { cookie: cookieA },
+        payload: { name },
+      });
+      assert.equal(res.statusCode, 400, `${JSON.stringify(name)} must be refused`);
+      assert.equal(res.json().error.code, "VALIDATION_ERROR");
+    }
+
+    const register = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: {
+        email: "spoof@example.com",
+        password: "password1",
+        name: "alice\u202e",
+      },
+    });
+    assert.equal(register.statusCode, 400);
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(me.json().name, "alice", "a refused rename must not take effect");
   });
 
   await it("create and list lists", async () => {
@@ -1129,9 +1182,10 @@ describe("shared lists", async () => {
       users.map((u) => u.name).sort(),
       ["alice", "bob", "carol"],
     );
-    assert.ok(
-      users.every((u) => u.email === undefined),
-      "the directory must not expose email addresses",
+    assert.deepEqual(
+      users.map((u) => u.email).sort(),
+      ["alice@example.com", "bob@example.com", "carol@example.com"],
+      "display names are not unique, so the address is what tells people apart",
     );
     assert.ok(users.some((u) => u.id === aliceId));
     assert.ok(users.some((u) => u.id === bobId));
@@ -1360,5 +1414,57 @@ describe("shared lists", async () => {
     });
     assert.equal(clearAll.statusCode, 200);
     assert.equal(clearAll.json().members.length, 0);
+  });
+});
+
+describe("directory email visibility", async () => {
+  await it("DIRECTORY_SHOW_EMAILS=false strips addresses but keeps the directory usable", async () => {
+    const dbPath = path.join(os.tmpdir(), `genesis-directory-${Date.now()}.db`);
+    const app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret",
+      cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
+      directoryShowEmails: false,
+    });
+    await app.ready();
+
+    try {
+      const alice = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "alice@example.com", password: "password1" },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "bob@example.com", password: "password1" },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/users",
+        headers: { cookie: getCookie(alice)! },
+      });
+      assert.equal(res.statusCode, 200);
+      const users = res.json().users as Array<{ id: string; name: string; email?: string }>;
+      assert.equal(users.length, 2, "sharing still needs the full directory");
+      assert.ok(
+        users.every((u) => u.email === undefined),
+        "no address may be returned when the operator opts out",
+      );
+      assert.deepEqual(users.map((u) => u.name).sort(), ["alice", "bob"]);
+    } finally {
+      await app.close();
+      for (const suffix of ["", "-wal", "-shm"]) {
+        const p = dbPath + suffix;
+        try {
+          if (fs.existsSync(p)) fs.unlinkSync(p);
+        } catch {
+          // ignore
+        }
+      }
+    }
   });
 });

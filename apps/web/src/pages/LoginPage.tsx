@@ -27,7 +27,7 @@ export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -78,7 +78,7 @@ export function LoginPage() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(username, password);
+      await login(email, password);
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
@@ -125,10 +125,11 @@ export function LoginPage() {
           {showPassword && (
             <>
               <TextField
-                label="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
                 fullWidth
               />

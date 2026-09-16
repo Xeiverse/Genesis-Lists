@@ -139,7 +139,7 @@ export function ListsPage() {
             onClick={(e) => setAccountAnchor(e.currentTarget)}
             aria-haspopup="menu"
             aria-label={
-              user?.username ? `Account menu for ${user.username}` : "Account menu"
+              user?.name ? `Account menu for ${user.name}` : "Account menu"
             }
           >
             <Avatar
@@ -150,7 +150,7 @@ export function ListsPage() {
                 fontSize: "0.875rem",
               }}
             >
-              {(user?.username?.[0] ?? "?").toUpperCase()}
+              {(user?.name?.[0] ?? "?").toUpperCase()}
             </Avatar>
           </IconButton>
         </Toolbar>
@@ -244,7 +244,7 @@ export function ListsPage() {
                           display="block"
                           sx={{ mb: 0.75 }}
                         >
-                          Shared by {list.ownerUsername}
+                          Shared by {list.ownerName}
                         </Typography>
                       )}
                       {list.previewItems.length === 0 ? (
@@ -447,7 +447,7 @@ export function ListsPage() {
       <ShareListDialog
         open={shareOpen}
         listId={active?.id ?? null}
-        ownerUsername={active?.ownerUsername ?? user?.username ?? ""}
+        ownerName={active?.ownerName ?? user?.name ?? ""}
         ownerUserId={user?.id}
         onClose={() => setShareOpen(false)}
         onError={setError}

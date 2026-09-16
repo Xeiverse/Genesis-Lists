@@ -15,17 +15,22 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { displayNameSchema } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 
 export function SettingsPage() {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const navigate = useNavigate();
+  const [name, setName] = useState(user?.name ?? "");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameSaving, setNameSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const canChangePassword = user?.authProviders.includes("local") ?? false;
@@ -33,6 +38,31 @@ export function SettingsPage() {
     user?.authProviders
       .map((p) => (p === "local" ? "password" : "OIDC"))
       .join(", ") ?? "";
+  const nameChanged = name.trim() !== (user?.name ?? "");
+
+  async function handleNameSubmit(e: FormEvent) {
+    e.preventDefault();
+    setNameError(null);
+
+    const parsed = displayNameSchema.safeParse(name);
+    if (!parsed.success) {
+      setNameError("Display name must be 1–64 characters.");
+      return;
+    }
+
+    setNameSaving(true);
+    try {
+      await updateProfile(parsed.data);
+      setName(parsed.data);
+      setToast("Display name updated.");
+    } catch (err) {
+      setNameError(
+        err instanceof ApiError ? err.message : "Failed to update display name",
+      );
+    } finally {
+      setNameSaving(false);
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -75,28 +105,45 @@ export function SettingsPage() {
       </AppBar>
 
       <Container maxWidth="sm" sx={{ py: 3 }}>
-        <Paper sx={{ p: 3 }}>
-          <Stack spacing={2} component="form" onSubmit={(e) => void handleSubmit(e)}>
+        <Paper sx={{ p: 3, mb: 2 }}>
+          <Stack spacing={2} component="form" onSubmit={(e) => void handleNameSubmit(e)}>
             <Typography variant="subtitle1" fontWeight={600}>
               Account
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Signed in as <strong>{user?.username}</strong>
+              Signed in as <strong>{user?.email}</strong>
             </Typography>
-            {user?.email ? (
-              <Typography variant="body2" color="text.secondary">
-                Email: {user.email}
-              </Typography>
-            ) : null}
             {providersLabel ? (
               <Typography variant="body2" color="text.secondary">
                 Sign-in methods: {providersLabel}
               </Typography>
             ) : null}
 
+            <TextField
+              label="Display name"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError(null);
+              }}
+              autoComplete="name"
+              fullWidth
+              error={Boolean(nameError)}
+              helperText={nameError ?? "The name other people see when you share a list"}
+            />
+            <Box>
+              <Button type="submit" disabled={nameSaving || !nameChanged}>
+                Save name
+              </Button>
+            </Box>
+          </Stack>
+        </Paper>
+
+        <Paper sx={{ p: 3 }}>
+          <Stack spacing={2} component="form" onSubmit={(e) => void handleSubmit(e)}>
             {canChangePassword ? (
               <>
-                <Typography variant="subtitle1" fontWeight={600} pt={1}>
+                <Typography variant="subtitle1" fontWeight={600}>
                   Change password
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -152,6 +199,16 @@ export function SettingsPage() {
       <Snackbar open={success} autoHideDuration={4000} onClose={() => setSuccess(false)}>
         <Alert severity="success" onClose={() => setSuccess(false)}>
           Password updated. Other sessions were signed out.
+        </Alert>
+      </Snackbar>
+
+      <Snackbar
+        open={toast !== null}
+        autoHideDuration={4000}
+        onClose={() => setToast(null)}
+      >
+        <Alert severity="success" onClose={() => setToast(null)}>
+          {toast}
         </Alert>
       </Snackbar>
     </Box>

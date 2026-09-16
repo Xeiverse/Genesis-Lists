@@ -12,19 +12,31 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { passwordSchema, usernameSchema, type AuthConfigDto } from "@genesis-lists/shared";
+import {
+  displayNameSchema,
+  emailSchema,
+  passwordSchema,
+  type AuthConfigDto,
+} from "@genesis-lists/shared";
 import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
 
-function usernameErrorMessage(value: string): string | null {
-  const result = usernameSchema.safeParse(value);
+function emailErrorMessage(value: string): string | null {
+  const result = emailSchema.safeParse(value);
   if (result.success) return null;
   const code = result.error.issues[0]?.code;
-  if (code === "too_small" || code === "too_big") {
-    return "Username must be 3–32 characters.";
+  if (code === "too_big") {
+    return "Email must be at most 254 characters.";
   }
-  return "Username may only contain letters, numbers, underscore, and hyphen.";
+  return "Enter a valid email address.";
+}
+
+function nameErrorMessage(value: string): string | null {
+  if (value.trim() === "") return null;
+  return displayNameSchema.safeParse(value).success
+    ? null
+    : "Display name must be at most 64 characters.";
 }
 
 function passwordErrorMessage(value: string): string | null {
@@ -40,9 +52,11 @@ function passwordErrorMessage(value: string): string | null {
 export function RegisterPage() {
   const { user, register } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -74,15 +88,17 @@ export function RegisterPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    const nextUsernameError = usernameErrorMessage(username);
+    const nextEmailError = emailErrorMessage(email);
+    const nextNameError = nameErrorMessage(name);
     const nextPasswordError = passwordErrorMessage(password);
-    setUsernameError(nextUsernameError);
+    setEmailError(nextEmailError);
+    setNameError(nextNameError);
     setPasswordError(nextPasswordError);
-    if (nextUsernameError || nextPasswordError) return;
+    if (nextEmailError || nextNameError || nextPasswordError) return;
 
     setSubmitting(true);
     try {
-      await register(username, password);
+      await register(email, password, name.trim() || undefined);
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Registration failed");
@@ -114,21 +130,37 @@ export function RegisterPage() {
           ) : registrationAllowed ? (
             <>
               <Typography variant="body2" color="text.secondary">
-                Username 3–32 chars (letters, numbers, _ -). Password min 8 characters.
+                Sign in with your email address. Password min 8 characters.
               </Typography>
               {error && <Alert severity="error">{error}</Alert>}
               <TextField
-                label="Username"
-                value={username}
+                label="Email"
+                type="email"
+                value={email}
                 onChange={(e) => {
-                  setUsername(e.target.value);
-                  if (usernameError) setUsernameError(null);
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
                 }}
-                autoComplete="username"
+                autoComplete="email"
                 required
                 fullWidth
-                error={Boolean(usernameError)}
-                helperText={usernameError ?? "3–32 characters: letters, numbers, _ and -"}
+                error={Boolean(emailError)}
+                helperText={emailError ?? "You will use this to sign in"}
+              />
+              <TextField
+                label="Display name"
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (nameError) setNameError(null);
+                }}
+                autoComplete="name"
+                fullWidth
+                error={Boolean(nameError)}
+                helperText={
+                  nameError ??
+                  "Optional. What others see when sharing; defaults to the part before the @"
+                }
               />
               <TextField
                 label="Password"

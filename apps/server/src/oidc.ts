@@ -4,6 +4,7 @@ import {
   displayNameSchema,
   emailSchema,
 } from "@genesis-lists/shared";
+import { envFlag } from "./util.js";
 
 export type OidcSettings = {
   enabled: boolean;
@@ -43,11 +44,6 @@ export type OidcProvider = {
     expectedNonce: string | null;
   }) => Promise<OidcClaims>;
 };
-
-function envFlag(raw: string | undefined, defaultValue: boolean): boolean {
-  if (raw === undefined || raw.trim() === "") return defaultValue;
-  return raw.trim().toLowerCase() === "true";
-}
 
 function requireWhenEnabled(
   enabled: boolean,
@@ -108,6 +104,16 @@ function claimString(
   return undefined;
 }
 
+/**
+ * Absent means "this IdP does not emit the claim" and is accepted. Anything
+ * present must say yes: IdPs serialize booleans as strings and as 0/1, so
+ * matching only `=== false` would let `"false"` through.
+ */
+function emailIsVerified(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  return value === true || value === "true" || value === 1 || value === "1";
+}
+
 export function extractOidcClaims(
   settings: OidcSettings,
   issuer: string,
@@ -121,8 +127,8 @@ export function extractOidcClaims(
   // An IdP that lets users set an unverified address could otherwise claim
   // someone else's account (07-security.md). An absent claim is accepted
   // because not every IdP emits it.
-  if (claims.email_verified === false) {
-    throw new Error("OIDC token asserts email_verified: false");
+  if (!emailIsVerified(claims.email_verified)) {
+    throw new Error("OIDC token does not assert email_verified");
   }
 
   const emailRaw = claimString(claims, settings.emailClaim);

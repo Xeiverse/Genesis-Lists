@@ -80,16 +80,30 @@ describe("extractOidcClaims", () => {
     );
   });
 
-  it("rejects an unverified email", () => {
-    assert.throws(
-      () =>
-        extractOidcClaims(settings(), issuer, {
-          sub: "sub-1",
-          email: "alice@example.com",
-          email_verified: false,
-        }),
-      /email_verified/,
-    );
+  it("rejects an unverified email however the IdP spells it", () => {
+    for (const email_verified of [false, "false", 0, "0", "no", {}]) {
+      assert.throws(
+        () =>
+          extractOidcClaims(settings(), issuer, {
+            sub: "sub-1",
+            email: "alice@example.com",
+            email_verified,
+          }),
+        /email_verified/,
+        `email_verified: ${JSON.stringify(email_verified)} must not be treated as verified`,
+      );
+    }
+  });
+
+  it("accepts an affirmative email_verified claim however the IdP spells it", () => {
+    for (const email_verified of [true, "true", 1, "1"]) {
+      const claims = extractOidcClaims(settings(), issuer, {
+        sub: "sub-1",
+        email: "alice@example.com",
+        email_verified,
+      });
+      assert.equal(claims.email, "alice@example.com");
+    }
   });
 
   it("accepts an absent email_verified claim", () => {

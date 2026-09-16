@@ -12,7 +12,7 @@ It is inspired by tools like Google Keep, but owned and operated by the people w
 2. **Simple by default** — Lists and checklist items; no feature sprawl in MVP.
 3. **Spec-driven** — Behavior is defined in `docs/` and OpenAPI before (and above) code.
 4. **Multi-user ready** — Isolated accounts from day one; sharing via an explicit member model.
-5. **Extensible auth later** — Local username/password now; OIDC (e.g. Authentik) on the roadmap.
+5. **Extensible auth** — Local email/password, plus optional OIDC (e.g. Authentik). One identifier, the email address, links the two.
 
 ## Personas
 

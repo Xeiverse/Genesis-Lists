@@ -130,9 +130,10 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `OIDC_CLIENT_SECRET` | When OIDC enabled | — | Client secret |
 | `OIDC_SCOPE` | No | `openid profile email` | Space-delimited scopes |
 | `OIDC_BUTTON_TEXT` | No | `Sign in with OIDC` | Login button label |
-| `OIDC_AUTO_REGISTER` | No | `true` | Create a local user on first OIDC login when no username match exists |
+| `OIDC_AUTO_REGISTER` | No | `true` | Create a local user on first OIDC login when no email match exists |
 | `OIDC_AUTO_LAUNCH` | No | `false` | Skip the login form and start OIDC immediately |
-| `OIDC_USERNAME_CLAIM` | No | `preferred_username` | Claim mapped to local username (merge / create) |
+| `OIDC_EMAIL_CLAIM` | No | `email` | Claim matched against the local account email (merge / create). Must be a valid address |
+| `OIDC_NAME_CLAIM` | No | `name` | Claim used as the display name when auto-registering; falls back to the email local part |
 | `OIDC_DISABLE_PASSWORD_LOGIN` | No | `false` | When `true` and OIDC is enabled, reject local password login/register |
 | `OIDC_REDIRECT_URI` | No | derived | Full callback URL override; default `{PUBLIC_BASE_URL}/api/auth/oidc/callback` |
 
@@ -143,6 +144,28 @@ JSON request bodies larger than **16 KiB** are rejected (`400 VALIDATION_ERROR`)
 ## Data and upgrades
 
 On startup the app applies numbered schema steps and records them in `schema_migrations`. Existing 0.1 databases are left intact. Later releases add a migration step instead of expecting you to edit the file. `GET /api/health` includes `schemaVersion` so you can confirm the upgrade ran.
+
+### Upgrading to schema version 4 deletes non-email accounts
+
+> **Back up `app.db` before this upgrade.** There is no automatic rollback and no downgrade path.
+
+Accounts are now identified by email address instead of username ([ADR 0006](adr/0006-email-login-identifier.md)). When the server first starts on this version it rewrites the `users` table:
+
+- An account whose username is already a valid email address is kept. Its email is that address (lower-cased), its display name becomes the part before the `@`, and its password, lists, shares, and sessions are untouched.
+- **Every other account is deleted**, along with the lists it owns, the items on those lists, its memberships of other people's lists, and its sessions. Those people must register again with an email address, and their lists must be recreated.
+- The server logs a warning naming each removed account.
+
+Check the log after the upgrade:
+
+```bash
+docker compose logs genesis-lists | grep "Schema v4"
+```
+
+If you need the old data, stop the container, restore your backup, and export what you need before retrying. To preview the damage first, list the usernames that are not email addresses:
+
+```bash
+sqlite3 app.db "SELECT username FROM users WHERE username NOT LIKE '%_@_%.__%';"
+```
 
 The image runs as user id **10001**. A volume created by an older root image can fail with `EACCES` on `/data`. One-time fix (project name prefix may differ; check `docker volume ls`):
 
@@ -218,4 +241,4 @@ Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in 
 | `/api/health` is `503` | Process is up but SQLite failed. Check the volume mount and file permissions. |
 | Cannot pull `ghcr.io/xeiverse/genesis-lists` | The tag has not been published yet. Use `docker compose up -d --build` from a checkout of that version. |
 | OIDC container exits on start | Missing `OIDC_*` / `PUBLIC_BASE_URL`, or discovery unreachable from the container. See [Authentik guide](guides/oauth-authentik.md). |
-| OIDC returns to `/login?error=oidc` | Check redirect URI, username claim rules, and auto-register; inspect app logs. |
+| OIDC returns to `/login?error=oidc` | Check redirect URI, that the IdP releases a valid `email` claim (and does not send `email_verified: false`), and auto-register; inspect app logs. |

@@ -23,7 +23,7 @@ paths:
               example:
                 status: ok
                 version: "0.2.0"
-                schemaVersion: 3
+                schemaVersion: 4
         '503':
           description: Database unavailable
           content:
@@ -84,10 +84,11 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AuthCredentials'
+              $ref: '#/components/schemas/RegisterCredentials'
             example:
-              username: alice
+              email: alice@example.com
               password: secretpass
+              name: Alice
       responses:
         '201':
           description: Created and logged in
@@ -227,6 +228,34 @@ paths:
                 $ref: '#/components/schemas/User'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+    patch:
+      operationId: updateMe
+      summary: Update the current user's display name
+      description: >
+        Changes the name other users see in the share picker and on shared lists.
+        Display names are not unique. The email address cannot be changed here.
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            example:
+              name: Alice
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
 
   /api/auth/change-password:
     post:
@@ -260,8 +289,9 @@ paths:
       operationId: listUsers
       summary: List all users on the instance
       description: >
-        Self-host directory for the share picker. Returns id and username for every account.
-        Signed-in users can see all usernames on the instance.
+        Self-host directory for the share picker. Returns id and display name for every
+        account. Signed-in users can see all display names on the instance.
+        Email addresses are never returned for other users.
       tags: [Users]
       security:
         - sessionCookie: []
@@ -286,7 +316,7 @@ paths:
       operationId: listLists
       summary: List lists owned by or shared with the current user
       description: >
-        Each list includes itemCount, up to 8 previewItems (by position), isOwner, and ownerUsername.
+        Each list includes itemCount, up to 8 previewItems (by position), isOwner, and ownerName.
       tags: [Lists]
       security:
         - sessionCookie: []
@@ -616,7 +646,7 @@ components:
         schemaVersion:
           type: integer
           minimum: 1
-          example: 3
+          example: 4
 
     HealthErrorResponse:
       type: object
@@ -679,17 +709,40 @@ components:
 
     AuthCredentials:
       type: object
-      required: [username, password]
+      required: [email, password]
       properties:
-        username:
+        email:
           type: string
-          minLength: 3
-          maxLength: 32
-          pattern: '^[a-zA-Z0-9_-]+$'
+          format: email
+          maxLength: 254
+          description: >
+            Login identifier. Trimmed and lower-cased before comparison, so it is
+            case-insensitive.
         password:
           type: string
           minLength: 8
           maxLength: 128
+
+    RegisterCredentials:
+      allOf:
+        - $ref: '#/components/schemas/AuthCredentials'
+        - type: object
+          properties:
+            name:
+              type: string
+              minLength: 1
+              maxLength: 64
+              description: >
+                Optional display name. Defaults to the local part of the email.
+
+    UpdateProfileRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
 
     ChangePasswordRequest:
       type: object
@@ -706,17 +759,18 @@ components:
 
     User:
       type: object
-      required: [id, username, authProviders]
+      required: [id, email, name, authProviders]
+      description: The authenticated user. Only ever describes the caller's own account.
       properties:
         id:
           type: string
           format: uuid
-        username:
-          type: string
         email:
           type: string
           format: email
-          nullable: true
+        name:
+          type: string
+          description: Display name shown to other users; not unique.
         authProviders:
           type: array
           minItems: 1
@@ -729,13 +783,15 @@ components:
 
     UserDirectoryEntry:
       type: object
-      required: [id, username]
-      description: Share-picker directory entry from GET /api/users (no authProviders).
+      required: [id, name]
+      description: >
+        Share-picker directory entry from GET /api/users. Display name only:
+        no email address and no authProviders.
       properties:
         id:
           type: string
           format: uuid
-        username:
+        name:
           type: string
 
     ListItemPreview:
@@ -760,7 +816,7 @@ components:
         - previewItems
         - itemCount
         - isOwner
-        - ownerUsername
+        - ownerName
       properties:
         id:
           type: string
@@ -789,19 +845,20 @@ components:
         isOwner:
           type: boolean
           description: True when the authenticated user owns the list.
-        ownerUsername:
+        ownerName:
           type: string
-          description: Username of the list owner.
+          description: Display name of the list owner.
 
     ListMember:
       type: object
-      required: [userId, username]
+      required: [userId, name]
       properties:
         userId:
           type: string
           format: uuid
-        username:
+        name:
           type: string
+          description: Display name of the member.
 
     PutMembersRequest:
       type: object
@@ -910,7 +967,7 @@ components:
               code: NOT_FOUND
               message: Not found
     ConflictError:
-      description: Conflict (e.g. username taken)
+      description: Conflict (e.g. email already registered)
       content:
         application/json:
           schema:
@@ -918,7 +975,7 @@ components:
           example:
             error:
               code: CONFLICT
-              message: Username already taken
+              message: Email already registered
     ForbiddenError:
       description: >
         Authenticated or policy refusal (registration closed, or access without capability

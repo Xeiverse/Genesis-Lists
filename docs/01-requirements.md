@@ -8,12 +8,13 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 
 | ID | User story | Acceptance criteria |
 |----|------------|---------------------|
-| REQ-AUTH-01 | As a new user, I can register with a username and password | Valid credentials create an account; duplicate username returns a clear error; I am logged in after successful register. When password login is disabled (REQ-OIDC-05), register returns `403 FORBIDDEN`. |
+| REQ-AUTH-01 | As a new user, I can register with an email and password | Valid credentials create an account; a duplicate email returns a clear error; I am logged in after successful register. An optional display name defaults to the local part of the email. Emails are compared trimmed and lower-cased, so `Alice@Example.com` and `alice@example.com` are the same account. When password login is disabled (REQ-OIDC-05), register returns `403 FORBIDDEN`. |
 | REQ-AUTH-02 | As a registered user, I can log in | Correct credentials establish a session; wrong credentials fail without revealing which field is wrong beyond a generic auth error. When password login is disabled (REQ-OIDC-05), login returns `403 FORBIDDEN`. |
 | REQ-AUTH-03 | As a logged-in user, I can log out | Session ends; protected routes require login again. Logout clears the local session only (IdP single logout is out of scope for this release). |
-| REQ-AUTH-04 | As a logged-in user, I can see who I am | `GET /api/auth/me` returns my user id, username, optional email, and `authProviders` |
+| REQ-AUTH-04 | As a logged-in user, I can see who I am | `GET /api/auth/me` returns my user id, email, display name, and `authProviders` |
 | REQ-AUTH-05 | As a logged-in user with a local password, I can change my password | Correct current password updates the hash; wrong current password fails; I can log in with the new password; other sessions for my account are deleted and the session that changed the password stays signed in. Users without a password hash cannot change password (`403 FORBIDDEN`). |
 | REQ-AUTH-06 | As an operator, I can stop strangers creating accounts | `ALLOW_REGISTRATION` is `true` (always open), `false` (always closed), or unset/`bootstrap` (open only until the first account exists). Closed registration returns `403 FORBIDDEN`. `GET /api/auth/registration` reports `{ open }` without auth so the UI can hide the register form. Password registration is also refused when REQ-OIDC-05 applies. |
+| REQ-AUTH-07 | As a logged-in user, I can change the display name others see | `PATCH /api/auth/me` with a 1–64 character name updates it and returns the updated user. Display names are not unique. My email is never changed by this endpoint. |
 
 ### Authentication (OIDC)
 
@@ -22,11 +23,11 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 | REQ-OIDC-01 | As an operator, I can enable OIDC with environment variables | When `OIDC_ENABLED=true` and required settings are present, discovery succeeds at startup. Missing required settings or failed discovery prevents the process from starting. When disabled, OIDC routes are unavailable (`404`). |
 | REQ-OIDC-02 | As a user, I can sign in with my IdP | From the login page I start OIDC; after IdP consent the callback creates a local session cookie and I land on lists home. |
 | REQ-OIDC-03 | As a returning OIDC user, I am recognized by issuer + subject | A prior `user_identities` row for `(issuer, sub)` signs me into that local user. |
-| REQ-OIDC-04 | As an operator, matching usernames merge | On first OIDC login, if no identity row exists but a local user has the same username as `OIDC_USERNAME_CLAIM` (default `preferred_username`), the identity is linked to that user. If none exists and `OIDC_AUTO_REGISTER=true`, a user is created with `password_hash` null and optional email. If none exists and auto-register is false, login fails with a clear auth error. Claim values that fail username rules fail with a clear auth error. |
+| REQ-OIDC-04 | As an operator, matching emails merge | On first OIDC login, if no identity row exists but a local user has the same email as `OIDC_EMAIL_CLAIM` (default `email`), the identity is linked to that user. This links accounts created before the IdP was connected. If none exists and `OIDC_AUTO_REGISTER=true`, a user is created with `password_hash` null, the claimed email, and a display name from `OIDC_NAME_CLAIM` (default `name`, falling back to the email local part). If none exists and auto-register is false, login fails with a clear auth error. A missing or malformed email claim, or `email_verified: false`, fails with a clear auth error. |
 | REQ-OIDC-05 | As an operator, I can disable password login | When `OIDC_DISABLE_PASSWORD_LOGIN=true` (and OIDC is enabled), `POST /api/auth/login` and `POST /api/auth/register` return `403 FORBIDDEN`; the UI hides password forms. |
 | REQ-OIDC-06 | As the SPA, I can learn how to render auth | `GET /api/auth/config` returns registration openness, whether password login is enabled, and OIDC `{ enabled, buttonText, autoLaunch }` without auth. |
 | REQ-OIDC-07 | As a user, auto-launch can skip the login form | When `OIDC_AUTO_LAUNCH=true`, visiting login redirects into OIDC unless `?autoLaunch=0`. `?autoLaunch=1` forces auto-launch for that request. |
-| REQ-OIDC-08 | As a user, my optional email from the IdP is stored | When the IdP provides an `email` claim, it is stored on the user (nullable; not unique). `/api/auth/me` may return it. |
+| REQ-OIDC-08 | As a user, my email from the IdP is my identity | The email claim is required for OIDC login; it is stored on the user as the unique login identifier and returned by `/api/auth/me`. If the claim changes to an address already held by another account, login fails rather than merging the two. |
 
 ### Lists
 
@@ -57,7 +58,7 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 | REQ-SHARE-03 | As a member, I cannot delete the list or manage members | `DELETE /api/lists/{id}` and member management return `403 FORBIDDEN` |
 | REQ-SHARE-04 | As an owner, I can revoke access | Unticking a user and saving removes them; they no longer see the list (`404` on direct access) |
 | REQ-SHARE-05 | As a member, I can leave a shared list | `DELETE /api/lists/{id}/members/me` removes my membership; the list disappears from my home. Owners cannot leave (`400`) |
-| REQ-SHARE-06 | As a signed-in user, I can list other users for sharing | `GET /api/users` returns `{ id, username }` for all accounts (self-host directory) |
+| REQ-SHARE-06 | As a signed-in user, I can list other users for sharing | `GET /api/users` returns `{ id, name }` for all accounts (self-host directory). Email addresses are never returned for other users. |
 
 ### Client & ops
 
@@ -81,7 +82,10 @@ Requirement IDs (`REQ-*`) map to acceptance checklists under [`acceptance/`](acc
 - SAML, multiple concurrent IdPs, admin OAuth settings UI
 - OIDC backchannel logout and IdP end-session on logout
 
-## Password & username rules
+## Email, display name & password rules
 
-- Username: 3–32 chars; `[a-zA-Z0-9_-]` (also enforced for OIDC username claims before merge/create)
+- Email: a valid address, at most 254 characters. Normalized by trimming and lower-casing before storage and comparison, so it is unique case-insensitively. The same rule is enforced for OIDC email claims before merge/create.
+- Display name: 1–64 characters after trimming; not unique. Defaults to the email local part when not supplied.
 - Password: minimum 8 characters (no complexity score)
+
+Email addresses are identifiers only. Nothing is sent to them, and ownership is not verified for local accounts (see [Out of scope](#out-of-scope)).

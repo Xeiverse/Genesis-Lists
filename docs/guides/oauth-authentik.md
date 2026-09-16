@@ -62,7 +62,8 @@ OIDC_SCOPE=openid profile email
 OIDC_BUTTON_TEXT=Sign in with Authentik
 OIDC_AUTO_REGISTER=true
 OIDC_AUTO_LAUNCH=false
-OIDC_USERNAME_CLAIM=preferred_username
+OIDC_EMAIL_CLAIM=email
+OIDC_NAME_CLAIM=name
 OIDC_DISABLE_PASSWORD_LOGIN=false
 ```
 
@@ -83,7 +84,7 @@ OIDC_DISABLE_PASSWORD_LOGIN=true
 OIDC_AUTO_REGISTER=true
 ```
 
-Existing local users whose username matches Authentik `preferred_username` are **linked** on first OIDC login (for example Authentik `alice` → Genesis Lists `alice`).
+Existing local users whose email matches the Authentik `email` claim are **linked** on first OIDC login (for example Authentik `alice@example.com` → the Genesis Lists account registered as `alice@example.com`). This is how an instance that already had accounts adopts Authentik without recreating them: make sure each Authentik user's email matches the address the person registered with.
 
 ## 3. Redirect URI checklist
 
@@ -94,12 +95,16 @@ Existing local users whose username matches Authentik `preferred_username` are *
 
 If the public URL differs from how the container sees itself, set `PUBLIC_BASE_URL` to the browser-facing origin, or set `OIDC_REDIRECT_URI` to the full callback URL.
 
-## 4. Username and email claims
+## 4. Email and name claims
+
+The `email` scope must be granted to the provider, and every Authentik user signing in must have an email address set. Login fails without one.
 
 | Genesis Lists setting | Default | Authentik |
 |-----------------------|---------|-----------|
-| `OIDC_USERNAME_CLAIM` | `preferred_username` | Map to a value that matches local username rules: 3–32 chars, `[a-zA-Z0-9_-]` |
-| email | claim `email` when present | Stored on the user; not unique |
+| `OIDC_EMAIL_CLAIM` | `email` | The account identifier. Must be a valid address; it is matched (lower-cased) against `users.email` to link or create the local account |
+| `OIDC_NAME_CLAIM` | `name` | Display name used when creating a new account. Falls back to the part of the email before the `@`. Only applied at creation, so a user's own renames are not overwritten |
+
+Genesis Lists refuses the login if Authentik asserts `email_verified: false`. An absent claim is accepted.
 
 ## 5. Troubleshooting
 
@@ -107,7 +112,7 @@ If the public URL differs from how the container sees itself, set `PUBLIC_BASE_U
 |---------|----------------|
 | Container exits; OIDC discovery error | Issuer URL, trailing slash, TLS/CA inside the container, proxy not returning HTML/login page for `.well-known` |
 | Redirect URI mismatch | Authentik Strict URI must equal `PUBLIC_BASE_URL` + `/api/auth/oidc/callback` (or `OIDC_REDIRECT_URI`) |
-| Login works at IdP then `/login?error=oidc` | Server logs; invalid username claim; `OIDC_AUTO_REGISTER=false` with no matching local user |
+| Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim (check the `email` scope and that the user has an address); `email_verified: false`; `OIDC_AUTO_REGISTER=false` with no matching local user |
 | Password form still shown | `OIDC_DISABLE_PASSWORD_LOGIN` only applies when `OIDC_ENABLED=true`; recreate container after env change |
 | Encryption / token errors with Authentik | Leave the provider **encryption key** empty; keep a signing key |
 

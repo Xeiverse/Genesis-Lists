@@ -18,7 +18,7 @@ Second, a username is a second credential to invent and remember for an app that
 - **A separate display name.** `users.name` (`NOT NULL`, 1–64 chars, not unique) is what the UI shows: avatars, "Shared by …", and the share picker. Users can change it from Settings via `PATCH /api/auth/me`. When registration or OIDC does not supply one, it defaults to the local part of the email.
 - **The user directory never exposes emails.** `GET /api/users` returns `{ id, name }`. Sharing is still performed by user id.
 - **OIDC links by email.** Lookup order on callback is `(issuer, subject)` → `users.email` matching the email claim → auto-register when enabled. `OIDC_USERNAME_CLAIM` is replaced by `OIDC_EMAIL_CLAIM` (default `email`) and `OIDC_NAME_CLAIM` (default `name`). A login is refused when the IdP asserts `email_verified: false`.
-- **Schema version 4 is destructive.** Accounts whose username is not a valid email cannot be migrated and are deleted along with their lists, items, memberships, sessions, and identity rows. Accounts whose username is already a valid email keep their password, lists, and shares. Following [ADR 0003](0003-sqlite-default.md), this happens as an ordered startup step recorded in `schema_migrations`.
+- **Schema version 4 is destructive.** An account is migrated when an address can be recovered for it: its username if that is already a valid email (so password logins keep working), otherwise the optional email an IdP had stored on it. Those accounts keep their password, lists, and shares. Every other account is deleted along with its lists, items, memberships, sessions, and identity rows. Following [ADR 0003](0003-sqlite-default.md), this happens as an ordered startup step recorded in `schema_migrations`.
 
 ## Consequences
 

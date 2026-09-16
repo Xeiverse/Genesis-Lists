@@ -1,19 +1,41 @@
 import { z } from "zod";
 
-export const usernameSchema = z
+/** Login identifier. Trimmed and lower-cased so accounts are case-insensitive. */
+export const emailSchema = z
   .string()
-  .min(3)
-  .max(32)
-  .regex(/^[a-zA-Z0-9_-]+$/);
+  .trim()
+  .toLowerCase()
+  .pipe(z.string().email().max(254));
+
+/** Display name shown to other users. Not unique. */
+export const displayNameSchema = z.string().trim().min(1).max(64);
 
 export const passwordSchema = z.string().min(8).max(128);
 
+/** Fallback display name for accounts that never supplied one. */
+export function displayNameFromEmail(email: string): string {
+  const localPart = email.slice(0, email.lastIndexOf("@"));
+  return localPart.slice(0, 64) || email.slice(0, 64);
+}
+
 export const authCredentialsSchema = z.object({
-  username: usernameSchema,
+  email: emailSchema,
   password: passwordSchema,
 });
 
 export type AuthCredentials = z.infer<typeof authCredentialsSchema>;
+
+export const registerSchema = authCredentialsSchema.extend({
+  name: displayNameSchema.optional(),
+});
+
+export type RegisterCredentials = z.infer<typeof registerSchema>;
+
+export const updateProfileSchema = z.object({
+  name: displayNameSchema,
+});
+
+export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
@@ -54,17 +76,18 @@ export const updateItemSchema = z
 
 export type AuthProvider = "local" | "oidc";
 
+/** The authenticated user. Only ever describes the caller's own account. */
 export type UserDto = {
   id: string;
-  username: string;
-  email?: string | null;
+  email: string;
+  name: string;
   authProviders: AuthProvider[];
 };
 
-/** Directory entry for the share picker (`GET /api/users`). */
+/** Directory entry for the share picker (`GET /api/users`). Never carries emails. */
 export type UserDirectoryDto = {
   id: string;
-  username: string;
+  name: string;
 };
 
 export type OidcPublicConfigDto = {
@@ -81,7 +104,7 @@ export type AuthConfigDto = {
 
 export type ListMemberDto = {
   userId: string;
-  username: string;
+  name: string;
 };
 
 export const putListMembersSchema = z.object({
@@ -98,7 +121,7 @@ export type ListDto = {
   previewItems: ListItemPreviewDto[];
   itemCount: number;
   isOwner: boolean;
-  ownerUsername: string;
+  ownerName: string;
 };
 
 export type ListItemDto = {

@@ -69,7 +69,7 @@ export function resolveSessionSecret(opts: {
   return secret;
 }
 
-export type AuthUser = { id: string; username: string };
+export type AuthUser = { id: string; email: string; name: string };
 
 declare module "fastify" {
   interface FastifyRequest {

@@ -151,8 +151,9 @@ On startup the app applies numbered schema steps and records them in `schema_mig
 
 Accounts are now identified by email address instead of username ([ADR 0006](adr/0006-email-login-identifier.md)). When the server first starts on this version it rewrites the `users` table:
 
-- An account whose username is already a valid email address is kept. Its email is that address (lower-cased), its display name becomes the part before the `@`, and its password, lists, shares, and sessions are untouched.
+- An account whose username is already a valid email address is kept, using that address. An account with a non-email username is still kept if an IdP previously stored an email address on it, using that address instead. Either way the display name becomes the part before the `@`, and the password, lists, shares, and sessions are untouched.
 - **Every other account is deleted**, along with the lists it owns, the items on those lists, its memberships of other people's lists, and its sessions. Those people must register again with an email address, and their lists must be recreated.
+- If two accounts resolve to the same address, the older one is kept and the newer ones are deleted.
 - The server logs a warning naming each removed account.
 
 Check the log after the upgrade:
@@ -161,10 +162,13 @@ Check the log after the upgrade:
 docker compose logs genesis-lists | grep "Schema v4"
 ```
 
-If you need the old data, stop the container, restore your backup, and export what you need before retrying. To preview the damage first, list the usernames that are not email addresses:
+If you need the old data, stop the container, restore your backup, and export what you need before retrying. To preview the damage first, list the accounts with no usable address:
 
 ```bash
-sqlite3 app.db "SELECT username FROM users WHERE username NOT LIKE '%_@_%.__%';"
+sqlite3 app.db \
+  "SELECT username FROM users
+   WHERE username NOT LIKE '%_@_%.__%'
+     AND (email IS NULL OR email NOT LIKE '%_@_%.__%');"
 ```
 
 The image runs as user id **10001**. A volume created by an older root image can fail with `EACCES` on `/data`. One-time fix (project name prefix may differ; check `docker volume ls`):

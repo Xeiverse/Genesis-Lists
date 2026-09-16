@@ -10,7 +10,7 @@ import {
   type AuthProvider,
   type UserDto,
 } from "@genesis-lists/shared";
-import type { Db, UserRow } from "../db/index.js";
+import { isUniqueViolation, type Db, type UserRow } from "../db/index.js";
 import {
   OIDC_STATE_TTL_MS,
   newOidcStateMaterials,
@@ -36,6 +36,14 @@ function sessionExpiry() {
 
 function oidcStateExpiry() {
   return new Date(Date.now() + OIDC_STATE_TTL_MS).toISOString();
+}
+
+function validationDetail(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
+  return (
+    error.issues
+      .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+      .join("; ") || "Invalid request body"
+  );
 }
 
 function disabledOidcSettings(): OidcSettings {
@@ -276,10 +284,7 @@ export async function registerAuth(
 
     const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) {
-      const detail = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
-        .join("; ");
-      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
     const { email, password } = parsed.data;
@@ -292,9 +297,18 @@ export async function registerAuth(
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
     const createdAt = nowIso();
 
-    db.prepare(
-      `INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`,
-    ).run(id, email, name, passwordHash, createdAt);
+    try {
+      db.prepare(
+        `INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`,
+      ).run(id, email, name, passwordHash, createdAt);
+    } catch (err) {
+      // Hashing the password yields the event loop, so a concurrent request can
+      // take the address between the check above and this insert.
+      if (isUniqueViolation(err)) {
+        return sendError(reply, 409, "CONFLICT", "Email already registered");
+      }
+      throw err;
+    }
 
     const sessionId = createSession(id);
     setSessionCookie(reply, sessionId);
@@ -310,10 +324,7 @@ export async function registerAuth(
 
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
-      const detail = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
-        .join("; ");
-      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
     const { email, password } = parsed.data;
@@ -469,12 +480,7 @@ export async function registerAuth(
 
     const parsed = updateProfileSchema.safeParse(request.body);
     if (!parsed.success) {
-      return sendError(
-        reply,
-        400,
-        "VALIDATION_ERROR",
-        "Display name must be 1-64 characters",
-      );
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
     db.prepare(`UPDATE users SET name = ? WHERE id = ?`).run(

@@ -55,6 +55,16 @@ class ListsRepository(
         settings.baseUrl = normalizeBaseUrl(url)
     }
 
+    fun getCustomProxyHeaders(): Map<String, String> = settings.customProxyHeaders
+
+    fun setCustomProxyHeaders(headers: Map<String, String>) {
+        settings.customProxyHeaders = headers
+    }
+
+    fun setCustomProxyHeaderRows(rows: List<Pair<String, String>>) {
+        settings.customProxyHeaders = ServerSettingsStore.sanitizeHeaderRows(rows)
+    }
+
     suspend fun checkHealth(url: String? = null): HealthDto {
         val previous = settings.baseUrl
         if (url != null) settings.baseUrl = normalizeBaseUrl(url)

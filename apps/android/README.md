@@ -39,6 +39,11 @@ Install on a device/emulator:
 
 Session auth uses the same `genesis_session` cookie as the web app, persisted in EncryptedSharedPreferences via OkHttp’s cookie jar. No Bearer/JWT API changes are required.
 
+## Settings & custom proxy headers
+
+- **Settings** is reachable from server setup and sign-in (ghost text button), as well as from the lists app bar. Back returns without clearing the server URL or session.
+- Under **Advanced → Custom proxy headers**, you can add name/value pairs (e.g. Cloudflare Access service tokens). They are stored in encrypted prefs and attached by an OkHttp interceptor on every API request, additive to the session cookie. Logout does **not** clear these headers.
+
 ## Offline behavior
 
 - **Read:** cached lists/items remain viewable offline.

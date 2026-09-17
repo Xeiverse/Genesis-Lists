@@ -123,12 +123,60 @@ class ServerSettingsStore(
             prefs.edit().putString(KEY_BASE_URL, value?.trim()?.trimEnd('/')).apply()
         }
 
+    var customProxyHeaders: Map<String, String>
+        get() {
+            val raw = prefs.getString(KEY_CUSTOM_HEADERS, null) ?: return emptyMap()
+            return runCatching { decodeHeadersJson(raw) }.getOrDefault(emptyMap())
+        }
+        set(value) {
+            val sanitized = sanitizeHeaders(value)
+            if (sanitized.isEmpty()) {
+                prefs.edit().remove(KEY_CUSTOM_HEADERS).apply()
+            } else {
+                prefs.edit().putString(KEY_CUSTOM_HEADERS, encodeHeadersJson(sanitized)).apply()
+            }
+        }
+
     fun clear() {
+        // Clears server URL and custom headers. Logout must not call this.
         prefs.edit().clear().apply()
     }
 
     companion object {
         private const val KEY_BASE_URL = "base_url"
+        private const val KEY_CUSTOM_HEADERS = "custom_proxy_headers"
+
+        private val json = kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+        }
+
+        fun encodeHeadersJson(headers: Map<String, String>): String =
+            json.encodeToString(kotlinx.serialization.serializer(), headers)
+
+        fun decodeHeadersJson(raw: String): Map<String, String> =
+            json.decodeFromString(kotlinx.serialization.serializer(), raw)
+
+        /**
+         * Trim keys/values; drop empty keys; drop names with CR/LF or ':';
+         * later duplicate keys win (map overwrite).
+         */
+        fun sanitizeHeaders(input: Map<String, String>): Map<String, String> {
+            val out = linkedMapOf<String, String>()
+            for ((rawName, rawValue) in input) {
+                val name = rawName.trim()
+                val value = rawValue.trim()
+                if (name.isEmpty()) continue
+                if (name.contains('\r') || name.contains('\n') || name.contains(':')) continue
+                if (value.contains('\r') || value.contains('\n')) continue
+                out[name] = value
+            }
+            return out
+        }
+
+        /** Sanitize editable rows (name/value pairs); empty names discarded. */
+        fun sanitizeHeaderRows(rows: List<Pair<String, String>>): Map<String, String> =
+            sanitizeHeaders(rows.associate { it.first to it.second })
 
         private fun encryptedPrefs(context: Context, name: String): SharedPreferences {
             val masterKey = MasterKey.Builder(context)

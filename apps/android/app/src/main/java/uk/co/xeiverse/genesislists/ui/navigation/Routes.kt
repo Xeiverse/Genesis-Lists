@@ -8,4 +8,5 @@ sealed class Routes(val route: String) {
         fun create(listId: String) = "list/$listId"
     }
     data object Settings : Routes("settings")
+    data object ProxyHeaders : Routes("proxy_headers")
 }

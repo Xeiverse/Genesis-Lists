@@ -10,8 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -39,6 +43,7 @@ fun AuthScreen(
     repository: ListsRepository,
     onAuthenticated: () -> Unit,
     onChangeServer: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     var registerMode by remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
@@ -158,6 +163,11 @@ fun AuthScreen(
         Spacer(Modifier.height(16.dp))
         OutlinedButton(onClick = onChangeServer, modifier = Modifier.fillMaxWidth()) {
             Text("Change server")
+        }
+        TextButton(onClick = onSettings) {
+            Icon(Icons.Default.Settings, contentDescription = null)
+            Spacer(Modifier.width(4.dp))
+            Text("Settings")
         }
         Row(Modifier.padding(top = 8.dp)) {
             Text(

@@ -28,6 +28,7 @@ import uk.co.xeiverse.genesislists.ui.screens.auth.AuthScreen
 import uk.co.xeiverse.genesislists.ui.screens.detail.ListDetailScreen
 import uk.co.xeiverse.genesislists.ui.screens.lists.ListsHomeScreen
 import uk.co.xeiverse.genesislists.ui.screens.server.ServerSetupScreen
+import uk.co.xeiverse.genesislists.ui.screens.settings.ProxyHeadersScreen
 import uk.co.xeiverse.genesislists.ui.screens.settings.SettingsScreen
 import uk.co.xeiverse.genesislists.ui.theme.GenesisListsTheme
 import kotlinx.coroutines.launch
@@ -74,6 +75,10 @@ fun GenesisApp(repository: ListsRepository) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    fun openSettings() {
+        navController.navigate(Routes.Settings.route)
+    }
+
     NavHost(navController = navController, startDestination = start) {
         composable(Routes.ServerSetup.route) {
             ServerSetupScreen(
@@ -83,6 +88,7 @@ fun GenesisApp(repository: ListsRepository) {
                         popUpTo(Routes.ServerSetup.route) { inclusive = true }
                     }
                 },
+                onSettings = { openSettings() },
             )
         }
         composable(Routes.Auth.route) {
@@ -98,13 +104,14 @@ fun GenesisApp(repository: ListsRepository) {
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                onSettings = { openSettings() },
             )
         }
         composable(Routes.Lists.route) {
             ListsHomeScreen(
                 repository = repository,
                 onOpenList = { id -> navController.navigate(Routes.ListDetail.create(id)) },
-                onSettings = { navController.navigate(Routes.Settings.route) },
+                onSettings = { openSettings() },
                 onLoggedOut = {
                     navController.navigate(Routes.Auth.route) {
                         popUpTo(0) { inclusive = true }
@@ -138,6 +145,15 @@ fun GenesisApp(repository: ListsRepository) {
                 onServerChanged = {
                     // stay on settings; session cookies may no longer match new host
                 },
+                onProxyHeaders = {
+                    navController.navigate(Routes.ProxyHeaders.route)
+                },
+            )
+        }
+        composable(Routes.ProxyHeaders.route) {
+            ProxyHeadersScreen(
+                repository = repository,
+                onBack = { navController.popBackStack() },
             )
         }
     }

@@ -22,7 +22,10 @@ class GenesisListsApp : Application() {
 class AppContainer(app: Application) {
     private val settings = ServerSettingsStore(app)
     private val cookieJar = PersistentCookieJar.create(app)
-    private val okHttp = GenesisApiClient.buildOkHttp(cookieJar)
+    private val okHttp = GenesisApiClient.buildOkHttp(
+        cookieJar = cookieJar,
+        customHeadersProvider = { settings.customProxyHeaders },
+    )
     private val api = GenesisApiClient(baseUrlProvider = { settings.baseUrl }, client = okHttp)
     private val db = Room.databaseBuilder(app, GenesisDatabase::class.java, "genesis-lists.db")
         .fallbackToDestructiveMigration()

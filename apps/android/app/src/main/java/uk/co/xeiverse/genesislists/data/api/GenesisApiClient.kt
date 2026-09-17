@@ -137,9 +137,13 @@ class GenesisApiClient(
             isLenient = true
         }
 
-        fun buildOkHttp(cookieJar: CookieJar): OkHttpClient =
+        fun buildOkHttp(
+            cookieJar: CookieJar,
+            customHeadersProvider: () -> Map<String, String> = { emptyMap() },
+        ): OkHttpClient =
             OkHttpClient.Builder()
                 .cookieJar(cookieJar)
+                .addInterceptor(ProxyHeadersInterceptor(customHeadersProvider))
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)

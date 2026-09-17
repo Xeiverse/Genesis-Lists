@@ -19,7 +19,7 @@ Specs first for each item—extend docs and OpenAPI before implementation.
 Included:
 
 - Env-based OIDC (Authorization Code + PKCE)
-- Map OIDC `sub` + issuer; username merge; optional email
+- Map OIDC `sub` + issuer; email merge onto existing local accounts ([ADR 0006](adr/0006-email-login-identifier.md))
 - Local password accounts remain optional; `OIDC_DISABLE_PASSWORD_LOGIN`
 - Authentik self-hosting guide
 

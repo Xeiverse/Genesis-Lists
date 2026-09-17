@@ -11,9 +11,9 @@ erDiagram
   lists ||--o{ list_items : contains
   users {
     text id PK
-    text username UK
+    text email UK
+    text name
     text password_hash "nullable"
-    text email "nullable"
     datetime created_at
   }
   user_identities {
@@ -54,10 +54,12 @@ erDiagram
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
 | `id` | text | PK | UUID |
-| `username` | text | UNIQUE, NOT NULL | Case-sensitive store; compare as stored |
+| `email` | text | UNIQUE, NOT NULL | Login identifier; stored trimmed and lower-cased, so uniqueness is case-insensitive |
+| `name` | text | NOT NULL | Display name shown in the UI; 1–64 chars; **not** unique; no control characters or bidi overrides; defaults to the email local part |
 | `password_hash` | text | NULL | argon2id hash when set; null for OIDC-only users; never returned by API |
-| `email` | text | NULL | Optional; from OIDC `email` claim when present; not unique in v1 |
 | `created_at` | text (ISO-8601) | NOT NULL | UTC |
+
+`GET /api/users` exposes `id`, `name`, and `email` to any signed-in user, because non-unique names alone cannot tell two people apart in the share picker. `DIRECTORY_SHOW_EMAILS=false` drops `email` from that response. See [07-security.md](07-security.md).
 
 ### `user_identities`
 
@@ -116,9 +118,12 @@ Unique membership is enforced by the composite primary key `(list_id, user_id)`.
 
 ## OIDC identity rules
 
-1. Lookup order on callback: `(issuer, subject)` → else merge by username claim → else auto-register if enabled.
-2. Username from the configured claim must satisfy the same username rules as local registration.
-3. Deleting a user cascades identity rows.
+1. Lookup order on callback: `(issuer, subject)` → else merge by email claim → else auto-register if enabled.
+2. The email from the configured claim must satisfy the same rules as local registration, and is normalized the same way before comparison. A missing or malformed claim fails the login, as does an `email_verified` claim that is present and not affirmative.
+3. Merging by email is what links an account created before the IdP was connected to its IdP counterpart.
+4. Auto-register sets `name` from the configured name claim, falling back to the email local part.
+5. When a linked identity presents an email that another account already holds, the email is left unchanged rather than merging the two accounts.
+6. Deleting a user cascades identity rows.
 
 ## Sessions (implementation detail)
 
@@ -126,4 +131,16 @@ Sessions live in a `sessions` table (id, user_id, expires_at, created_at) with t
 
 Short-lived OIDC login state (PKCE verifier, nonce, expiry) is stored server-side in `oidc_login_states` and is not part of the public API model.
 
-Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`.
+Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`. Schema version **4** replaces `username` with a unique `email` and adds `name` ([ADR 0006](adr/0006-email-login-identifier.md)).
+
+### Schema version 4 is destructive
+
+Migration 4 rebuilds `users`. A pre-v4 account is carried over only if an email address can be recovered for it:
+
+- The username is used when it is already a valid address, so password logins keep working. Pre-v4 usernames were restricted to `[a-zA-Z0-9_-]`, so this only applies to a hand-edited database. Otherwise the v3 `email` column is used, which rescues accounts that signed in through an IdP. In practice that means local password accounts are removed and IdP-linked accounts survive.
+- For a carried-over account, `email` is that address trimmed and lower-cased, and `password_hash` and `created_at` are unchanged. Lists, items, memberships, sessions, and identity rows survive.
+- `name` is the old username, so the account keeps the label other people knew it by. When the username is itself an address, the email local part is used instead so the address does not become the display name. A username that no longer satisfies the display-name rules also falls back to the local part.
+- Any other account is **deleted**, together with the lists it owns (and those lists' items and memberships), its memberships of other people's lists, its sessions, and its identity rows. The migration logs a warning naming the removed accounts.
+- If two accounts resolve to the same email, the oldest `created_at` wins and the others are removed as above.
+
+Operators must back up the database before upgrading; see [06-self-hosting.md](06-self-hosting.md).

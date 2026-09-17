@@ -1,5 +1,10 @@
 import * as openid from "openid-client";
-import { usernameSchema } from "@genesis-lists/shared";
+import {
+  displayNameFromEmail,
+  displayNameSchema,
+  emailSchema,
+} from "@genesis-lists/shared";
+import { envFlag } from "./util.js";
 
 export type OidcSettings = {
   enabled: boolean;
@@ -10,7 +15,8 @@ export type OidcSettings = {
   buttonText: string;
   autoRegister: boolean;
   autoLaunch: boolean;
-  usernameClaim: string;
+  emailClaim: string;
+  nameClaim: string;
   disablePasswordLogin: boolean;
   redirectUri: string;
 };
@@ -18,8 +24,8 @@ export type OidcSettings = {
 export type OidcClaims = {
   issuer: string;
   subject: string;
-  username: string;
-  email: string | null;
+  email: string;
+  name: string;
 };
 
 export type OidcProvider = {
@@ -38,11 +44,6 @@ export type OidcProvider = {
     expectedNonce: string | null;
   }) => Promise<OidcClaims>;
 };
-
-function envFlag(raw: string | undefined, defaultValue: boolean): boolean {
-  if (raw === undefined || raw.trim() === "") return defaultValue;
-  return raw.trim().toLowerCase() === "true";
-}
 
 function requireWhenEnabled(
   enabled: boolean,
@@ -87,7 +88,8 @@ export function resolveOidcSettingsFromEnv(env: NodeJS.ProcessEnv): OidcSettings
     buttonText: env.OIDC_BUTTON_TEXT?.trim() || "Sign in with OIDC",
     autoRegister: envFlag(env.OIDC_AUTO_REGISTER, true),
     autoLaunch: envFlag(env.OIDC_AUTO_LAUNCH, false),
-    usernameClaim: env.OIDC_USERNAME_CLAIM?.trim() || "preferred_username",
+    emailClaim: env.OIDC_EMAIL_CLAIM?.trim() || "email",
+    nameClaim: env.OIDC_NAME_CLAIM?.trim() || "name",
     disablePasswordLogin: enabled && envFlag(env.OIDC_DISABLE_PASSWORD_LOGIN, false),
     redirectUri,
   };
@@ -102,14 +104,14 @@ function claimString(
   return undefined;
 }
 
-/** Username claims must match local rules as returned by the IdP (no trim). */
-function claimUsernameRaw(
-  claims: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const value = claims[key];
-  if (typeof value === "string" && value.length > 0) return value;
-  return undefined;
+/**
+ * Absent means "this IdP does not emit the claim" and is accepted. Anything
+ * present must say yes: IdPs serialize booleans as strings and as 0/1, so
+ * matching only `=== false` would let `"false"` through.
+ */
+function emailIsVerified(value: unknown): boolean {
+  if (value === undefined || value === null) return true;
+  return value === true || value === "true" || value === 1 || value === "1";
 }
 
 export function extractOidcClaims(
@@ -122,25 +124,35 @@ export function extractOidcClaims(
     throw new Error("OIDC token is missing sub claim");
   }
 
-  const usernameRaw = claimUsernameRaw(claims, settings.usernameClaim);
-  if (!usernameRaw) {
-    throw new Error(`OIDC token is missing ${settings.usernameClaim} claim`);
+  // An IdP that lets users set an unverified address could otherwise claim
+  // someone else's account (07-security.md). An absent claim is accepted
+  // because not every IdP emits it.
+  if (!emailIsVerified(claims.email_verified)) {
+    throw new Error("OIDC token does not assert email_verified");
   }
 
-  const parsedUsername = usernameSchema.safeParse(usernameRaw);
-  if (!parsedUsername.success) {
+  const emailRaw = claimString(claims, settings.emailClaim);
+  if (!emailRaw) {
+    throw new Error(`OIDC token is missing ${settings.emailClaim} claim`);
+  }
+
+  const parsedEmail = emailSchema.safeParse(emailRaw);
+  if (!parsedEmail.success) {
     throw new Error(
-      `OIDC ${settings.usernameClaim} claim is not a valid Genesis Lists username`,
+      `OIDC ${settings.emailClaim} claim is not a valid email address`,
     );
   }
+  const email = parsedEmail.data;
 
-  const email = claimString(claims, "email") ?? null;
+  const parsedName = displayNameSchema.safeParse(
+    claimString(claims, settings.nameClaim) ?? "",
+  );
 
   return {
     issuer,
     subject,
-    username: parsedUsername.data,
     email,
+    name: parsedName.success ? parsedName.data : displayNameFromEmail(email),
   };
 }
 

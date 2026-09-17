@@ -35,25 +35,26 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 |--------|------|------|-------------|
 | GET | `/api/auth/config` | No | `{ registrationOpen, passwordLoginEnabled, oidc: { enabled, buttonText, autoLaunch } }` for the SPA |
 | GET | `/api/auth/registration` | No | `{ "open": true \| false }` — whether new password accounts can be created (also false when password login is disabled) |
-| POST | `/api/auth/register` | No | Create account + session. `403 FORBIDDEN` when registration is closed or password login is disabled |
-| POST | `/api/auth/login` | No | Create session. `403 FORBIDDEN` when password login is disabled |
+| POST | `/api/auth/register` | No | Create account + session `{ "email", "password", "name"? }`. `403 FORBIDDEN` when registration is closed or password login is disabled; `409 CONFLICT` when the email is already registered |
+| POST | `/api/auth/login` | No | Create session `{ "email", "password" }`. `403 FORBIDDEN` when password login is disabled |
 | GET | `/api/auth/oidc/start` | No | `302` to the IdP authorize URL. `404` when OIDC is disabled |
 | GET | `/api/auth/oidc/callback` | No | Exchange code; set session cookie; `302` to `/`. Errors redirect to `/login?error=oidc` |
 | POST | `/api/auth/logout` | Yes | Destroy session |
-| GET | `/api/auth/me` | Yes | Current user `{ id, username, email?, authProviders }` |
+| GET | `/api/auth/me` | Yes | Current user `{ id, email, name, authProviders }` |
+| PATCH | `/api/auth/me` | Yes | Update display name `{ "name": "..." }`; returns the updated user. The email cannot be changed |
 | POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions; current session stays. `403` if the user has no password |
 
 ### Users
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/users` | Yes | Directory of all users `{ id, username }[]` for the share picker (self-host) |
+| GET | `/api/users` | Yes | Directory of all users `{ id, name, email }[]` for the share picker (self-host). Display names are not unique, so the address is what tells people apart; `email` is omitted when the operator sets `DIRECTORY_SHOW_EMAILS=false` |
 
 ### Lists
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by or shared with the current user (includes `previewItems` up to 8, `itemCount`, `isOwner`, `ownerUsername`) |
+| GET | `/api/lists` | Yes | Lists owned by or shared with the current user (includes `previewItems` up to 8, `itemCount`, `isOwner`, `ownerName`) |
 | POST | `/api/lists` | Yes | Create list `{ "name": "..." }` (`isOwner: true`) |
 | PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` — owner or member |
 | DELETE | `/api/lists/{id}` | Yes | Delete list + items — **owner only**; member → `403` |
@@ -62,7 +63,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists/{id}/members` | Yes | Current members `{ userId, username }[]` — **owner only**; member → `403` |
+| GET | `/api/lists/{id}/members` | Yes | Current members `{ userId, name }[]` — **owner only**; member → `403` |
 | PUT | `/api/lists/{id}/members` | Yes | Replace member set `{ "userIds": ["..."] }` — **owner only**. Rejects owner id or unknown ids (`400`). Empty array clears all members |
 | DELETE | `/api/lists/{id}/members/me` | Yes | Leave list — **member only**; owner → `400`; non-member / no access → `404` |
 
@@ -89,4 +90,5 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 - `checked` is a boolean in JSON (mapped to 0/1 in SQLite).
 - Request bodies are JSON; `Content-Type: application/json`.
 - `authProviders` is an array of `"local"` and/or `"oidc"` indicating how the account can authenticate.
+- Accounts are identified by **email**, normalized to lower case. `name` is a non-unique display label and is the only user field other accounts can see.
 - No access → `404`. Access without capability → `403`.

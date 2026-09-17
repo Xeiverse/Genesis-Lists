@@ -16,7 +16,7 @@ import { nowIso, requireUser, sendError, uuid } from "../util.js";
 
 type ListAccess = "owner" | "member" | "none";
 
-type ListWithOwner = ListRow & { owner_username: string };
+type ListWithOwner = ListRow & { owner_name: string };
 
 function getListAccess(db: Db, listId: string, userId: string): ListAccess {
   const list = db
@@ -36,7 +36,7 @@ function loadListWithOwner(
 ): ListWithOwner | undefined {
   return db
     .prepare(
-      `SELECT l.*, u.username AS owner_username
+      `SELECT l.*, u.name AS owner_name
        FROM lists l
        INNER JOIN users u ON u.id = l.owner_id
        WHERE l.id = ?`,
@@ -50,7 +50,7 @@ function toListDto(
     previewItems?: ListItemPreviewDto[];
     itemCount?: number;
     isOwner: boolean;
-    ownerUsername: string;
+    ownerName: string;
   },
 ): ListDto {
   return {
@@ -61,7 +61,7 @@ function toListDto(
     previewItems: opts.previewItems ?? [],
     itemCount: opts.itemCount ?? 0,
     isOwner: opts.isOwner,
-    ownerUsername: opts.ownerUsername,
+    ownerName: opts.ownerName,
   };
 }
 
@@ -140,14 +140,14 @@ function toItemDto(row: ItemRow): ListItemDto {
 function loadMembers(db: Db, listId: string): ListMemberDto[] {
   const rows = db
     .prepare(
-      `SELECT m.user_id AS user_id, u.username AS username
+      `SELECT m.user_id AS user_id, u.name AS name
        FROM list_members m
        INNER JOIN users u ON u.id = m.user_id
        WHERE m.list_id = ?
-       ORDER BY u.username ASC`,
+       ORDER BY u.name ASC`,
     )
-    .all(listId) as Array<{ user_id: string; username: string }>;
-  return rows.map((r) => ({ userId: r.user_id, username: r.username }));
+    .all(listId) as Array<{ user_id: string; name: string }>;
+  return rows.map((r) => ({ userId: r.user_id, name: r.name }));
 }
 
 function userCanAccessItem(
@@ -173,17 +173,27 @@ function userCanAccessItem(
   return row;
 }
 
-export async function registerListRoutes(app: FastifyInstance, db: Db) {
+export async function registerListRoutes(
+  app: FastifyInstance,
+  db: Db,
+  opts: { directoryShowEmails: boolean } = { directoryShowEmails: true },
+) {
   app.get("/api/users", async (request, reply) => {
     const user = await requireUser(request, reply);
     if (!user) return;
 
+    // Display names are not unique, so email breaks the tie in the ordering
+    // just as it does in the picker.
     const rows = db
-      .prepare(`SELECT id, username FROM users ORDER BY username ASC`)
-      .all() as Array<{ id: string; username: string }>;
+      .prepare(`SELECT id, name, email FROM users ORDER BY name ASC, email ASC`)
+      .all() as Array<{ id: string; name: string; email: string }>;
 
     return reply.send({
-      users: rows.map((r) => ({ id: r.id, username: r.username })),
+      users: rows.map((r) =>
+        opts.directoryShowEmails
+          ? { id: r.id, name: r.name, email: r.email }
+          : { id: r.id, name: r.name },
+      ),
     });
   });
 
@@ -193,7 +203,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
 
     const rows = db
       .prepare(
-        `SELECT l.*, u.username AS owner_username
+        `SELECT l.*, u.name AS owner_name
          FROM lists l
          INNER JOIN users u ON u.id = l.owner_id
          WHERE l.owner_id = ?
@@ -220,7 +230,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
           previewItems: preview.previewItems,
           itemCount: preview.itemCount,
           isOwner: row.owner_id === user.id,
-          ownerUsername: row.owner_username,
+          ownerName: row.owner_name,
         });
       }),
     });
@@ -250,7 +260,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
           created_at: ts,
           updated_at: ts,
         },
-        { isOwner: true, ownerUsername: user.username },
+        { isOwner: true, ownerName: user.name },
       ),
     );
   });
@@ -292,7 +302,7 @@ export async function registerListRoutes(app: FastifyInstance, db: Db) {
           previewItems: preview.previewItems,
           itemCount: preview.itemCount,
           isOwner: access === "owner",
-          ownerUsername: existing.owner_username,
+          ownerName: existing.owner_name,
         },
       ),
     );

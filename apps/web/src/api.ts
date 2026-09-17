@@ -53,15 +53,20 @@ export const api = {
     request<RegistrationStatusDto>("/api/auth/registration"),
   authConfig: () => request<AuthConfigDto>("/api/auth/config"),
   me: () => request<UserDto>("/api/auth/me"),
-  register: (username: string, password: string) =>
+  register: (email: string, password: string, name?: string) =>
     request<UserDto>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(name ? { email, password, name } : { email, password }),
     }),
-  login: (username: string, password: string) =>
+  login: (email: string, password: string) =>
     request<UserDto>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
+    }),
+  updateProfile: (name: string) =>
+    request<UserDto>("/api/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
     }),
   logout: () => request<void>("/api/auth/logout", { method: "POST" }),
   changePassword: (currentPassword: string, newPassword: string) =>

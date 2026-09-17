@@ -1,12 +1,17 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  displayNameFromEmail,
+  displayNameSchema,
+  emailSchema,
+} from "@genesis-lists/shared";
 
 export type UserRow = {
   id: string;
-  username: string;
+  email: string;
+  name: string;
   password_hash: string | null;
-  email: string | null;
   created_at: string;
 };
 
@@ -60,7 +65,7 @@ export type ItemRow = {
 
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -81,6 +86,18 @@ export function getSchemaVersion(db: Db): number {
     .get() as { version: number | bigint | null };
   if (row.version == null) return 0;
   return Number(row.version);
+}
+
+/** `SQLITE_CONSTRAINT_UNIQUE`. Lets a racing insert report the same conflict a pre-check would. */
+const SQLITE_CONSTRAINT_UNIQUE = 2067;
+
+export function isUniqueViolation(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const { errcode, message } = err as { errcode?: number; message?: string };
+  return (
+    errcode === SQLITE_CONSTRAINT_UNIQUE ||
+    (typeof message === "string" && message.includes("UNIQUE constraint failed"))
+  );
 }
 
 export function dbIsReady(db: Db): boolean {
@@ -116,6 +133,12 @@ function migrate(db: Db) {
     applyMigration3(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)`,
+    ).run(new Date().toISOString());
+  }
+  if (getSchemaVersion(db) < 4) {
+    applyMigration4(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (4, ?)`,
     ).run(new Date().toISOString());
   }
 }
@@ -221,6 +244,130 @@ function applyMigration3(db: Db) {
     throw err;
   } finally {
     db.exec("PRAGMA foreign_keys = ON;");
+  }
+}
+
+function firstValidEmail(...candidates: Array<string | null>): string | null {
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = emailSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
+}
+
+/**
+ * The username is the name people already knew the account by, so it is kept
+ * where it can be. When the username is itself an address, using it would put
+ * the address in the display name, so the local part is used instead.
+ */
+function migratedDisplayName(username: string, email: string): string {
+  if (emailSchema.safeParse(username).success) return displayNameFromEmail(email);
+  const parsed = displayNameSchema.safeParse(username);
+  return parsed.success ? parsed.data : displayNameFromEmail(email);
+}
+
+/**
+ * Email login identity (ADR 0006). Destructive: accounts that cannot be given an
+ * email address are removed along with everything they own.
+ */
+function applyMigration4(db: Db) {
+  const legacy = db
+    .prepare(
+      `SELECT id, username, email, password_hash, created_at FROM users ORDER BY created_at ASC, id ASC`,
+    )
+    .all() as Array<{
+    id: string;
+    username: string;
+    email: string | null;
+    password_hash: string | null;
+    created_at: string;
+  }>;
+
+  const keep: Array<{
+    id: string;
+    email: string;
+    name: string;
+    password_hash: string | null;
+    created_at: string;
+  }> = [];
+  const removed: string[] = [];
+  const claimed = new Map<string, string>();
+
+  for (const row of legacy) {
+    // The username is preferred so password logins keep working; a stored OIDC
+    // email rescues accounts that were auto-registered with a bare username.
+    const email = firstValidEmail(row.username, row.email);
+
+    if (!email) {
+      removed.push(`${row.username} (no valid email address)`);
+      continue;
+    }
+    const owner = claimed.get(email);
+    if (owner) {
+      removed.push(`${row.username} (${email} already taken by ${owner})`);
+      continue;
+    }
+
+    claimed.set(email, row.username);
+    keep.push({
+      id: row.id,
+      email,
+      name: migratedDisplayName(row.username, email),
+      password_hash: row.password_hash,
+      created_at: row.created_at,
+    });
+  }
+
+  db.exec("PRAGMA foreign_keys = OFF;");
+  db.exec("BEGIN;");
+  try {
+    db.exec(`
+      CREATE TABLE users_new (
+        id TEXT PRIMARY KEY NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        password_hash TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+    const insert = db.prepare(
+      `INSERT INTO users_new (id, email, name, password_hash, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    for (const user of keep) {
+      insert.run(user.id, user.email, user.name, user.password_hash, user.created_at);
+    }
+
+    db.exec(`
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+    `);
+
+    // Foreign keys are off during the rebuild, so cascades do not fire.
+    db.exec(`
+      DELETE FROM lists WHERE owner_id NOT IN (SELECT id FROM users);
+      DELETE FROM list_items WHERE list_id NOT IN (SELECT id FROM lists);
+      DELETE FROM list_members
+        WHERE user_id NOT IN (SELECT id FROM users)
+           OR list_id NOT IN (SELECT id FROM lists);
+      DELETE FROM sessions WHERE user_id NOT IN (SELECT id FROM users);
+      DELETE FROM user_identities WHERE user_id NOT IN (SELECT id FROM users);
+    `);
+
+    db.exec("COMMIT;");
+  } catch (err) {
+    db.exec("ROLLBACK;");
+    throw err;
+  } finally {
+    db.exec("PRAGMA foreign_keys = ON;");
+  }
+
+  if (removed.length > 0) {
+    console.warn(
+      `Schema v4: removed ${removed.length} account(s) that could not be migrated to email login, with their lists and shares: ${removed.join(", ")}`,
+    );
   }
 }
 

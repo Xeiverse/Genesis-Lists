@@ -30,7 +30,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 
 - Product mark and “Genesis Lists” above the heading.
 - Load `GET /api/auth/config` for registration openness, password login, and OIDC settings.
-- When password login is enabled: centered card/form with username, password, submit.
+- When password login is enabled: centered card/form with email, password, submit. The email field uses `type="email"` and `autocomplete="email"`.
 - When OIDC is enabled: a button labeled with `oidc.buttonText` that navigates to `/api/auth/oidc/start` (full page redirect).
 - When both are enabled, show the password form and the OIDC button (OIDC secondary or below a divider).
 - When only OIDC is enabled, omit the password fields.
@@ -42,18 +42,19 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 ### 2. Register
 
 - Product mark and “Genesis Lists” above the heading.
-- Username, password, submit — only when password login is enabled and registration is open.
+- Email, display name, password, submit — only when password login is enabled and registration is open.
+- Display name is optional and helper text explains it defaults to the part of the email before the `@`, and that it is what other people see when sharing.
 - Link to Login.
-- Validation messages for username/password rules ([01-requirements.md](01-requirements.md)).
+- Validation messages for email/display name/password rules ([01-requirements.md](01-requirements.md)).
 - On success → Lists home (session created).
 - If registration is closed or password login is disabled, the form is replaced with a short message and a link back to Sign in. No register request is sent.
 
 ### 3. Lists home
 
-- Top app bar: inverted product mark, product name “Genesis Lists”, circular avatar with username initial opening a menu (Settings, Log out). List detail and Settings do not repeat the mark.
+- Top app bar: inverted product mark, product name “Genesis Lists”, circular avatar with display-name initial opening a menu (Settings, Log out). List detail and Settings do not repeat the mark.
 - Search field below the app bar: filters lists by name or preview item text (client-side).
 - Body: Keep-style multi-column masonry of list cards (1 / 2 / 3 columns by breakpoint). Card heights vary with preview content; cards do not stretch to match neighbors in a row.
-- Each card: list name; when `isOwner` is false, a short “Shared by {ownerUsername}” line; up to 8 preview item lines (checked items struck through); optional “+N more”; overflow menu.
+- Each card: list name; when `isOwner` is false, a short “Shared by {ownerName}” line; up to 8 preview item lines (checked items struck through); optional “+N more”; overflow menu.
 - Overflow (owner): Rename, Share, Delete.
 - Overflow (member): Rename, Leave list (confirm).
 - Empty state: short copy + CTA to create first list.
@@ -77,8 +78,9 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 ### 4b. Share dialog (owner)
 
 - Opened from Share on home card menu or list detail overflow.
-- Dialog (`fullWidth`, `maxWidth="sm"`): title “Share list”, search field (filter usernames client-side), scrollable list of users.
-- Each row: avatar (username initial), username, checkbox. Owner appears at the top as read-only (checked, disabled) labeled as owner — not included in `userIds`.
+- Dialog (`fullWidth`, `maxWidth="sm"`): title “Share list”, search field (filters display names and addresses client-side), scrollable list of users.
+- Each row: avatar (display-name initial), display name, email address beneath it, checkbox. Owner appears at the top as read-only (checked, disabled) labeled as owner — not included in `userIds`.
+- The address is shown because display names are not unique, so it is the only thing distinguishing two people with the same name at the moment access is granted. When the operator sets `DIRECTORY_SHOW_EMAILS=false` the directory carries no addresses and rows fall back to the name alone ([07-security.md](07-security.md)).
 - Other users: tick = include in member set. Initial ticks match current members from `GET /api/lists/{id}/members`.
 - Save calls `PUT /api/lists/{id}/members` with the ticked non-owner user ids (full replace). Cancel discards local checkbox state.
 - Errors via snackbar.
@@ -86,7 +88,8 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 ### 5. Settings
 
 - App bar: back, “Settings”.
-- Show signed-in username, optional email, and auth providers (`local` / `oidc`).
+- Show the signed-in display name, email, and auth providers (`local` / `oidc`).
+- Display name field with a Save action calling `PATCH /api/auth/me`; success and error feedback inline. Copy notes that this is the name other people see.
 - Change password form (current, new, confirm) only when `authProviders` includes `local`; success feedback (other sessions are signed out); inline errors for mismatch / API failures.
 - OIDC-only accounts see a short note that password change is unavailable.
 - Route: `/settings` (auth required).

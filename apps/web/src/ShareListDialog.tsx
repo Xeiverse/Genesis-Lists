@@ -26,8 +26,9 @@ import { api, ApiError } from "./api";
 type ShareListDialogProps = {
   open: boolean;
   listId: string | null;
-  ownerUsername: string;
-  ownerUserId?: string;
+  ownerName: string;
+  /** The dialog is only reachable for lists the caller owns, so this is the owner. */
+  currentUserId?: string;
   onClose: () => void;
   onError: (message: string) => void;
 };
@@ -35,8 +36,8 @@ type ShareListDialogProps = {
 export function ShareListDialog({
   open,
   listId,
-  ownerUsername,
-  ownerUserId,
+  ownerName,
+  currentUserId,
   onClose,
   onError,
 }: ShareListDialogProps) {
@@ -46,7 +47,7 @@ export function ShareListDialog({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState("");
   const [resolvedOwnerId, setResolvedOwnerId] = useState<string | undefined>(
-    ownerUserId,
+    currentUserId,
   );
 
   useEffect(() => {
@@ -64,10 +65,8 @@ export function ShareListDialog({
         ]);
         if (cancelled) return;
         setUsers(usersRes.users);
-        const owner =
-          ownerUserId ??
-          usersRes.users.find((u) => u.username === ownerUsername)?.id;
-        setResolvedOwnerId(owner);
+        // Display names are not unique, so the owner can only be matched by id.
+        setResolvedOwnerId(currentUserId);
         setSelected(new Set(membersRes.members.map((m) => m.userId)));
       } catch (e) {
         if (!cancelled) {
@@ -84,18 +83,26 @@ export function ShareListDialog({
     };
     // Intentionally omit onClose/onError — callers pass inline lambdas.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, listId, ownerUsername, ownerUserId]);
+  }, [open, listId, currentUserId]);
 
   const otherUsers = useMemo(() => {
     return users
       .filter((u) => u.id !== resolvedOwnerId)
-      .sort((a, b) => a.username.localeCompare(b.username));
+      .sort(
+        (a, b) =>
+          a.name.localeCompare(b.name) ||
+          (a.email ?? "").localeCompare(b.email ?? ""),
+      );
   }, [users, resolvedOwnerId]);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return otherUsers;
-    return otherUsers.filter((u) => u.username.toLowerCase().includes(q));
+    return otherUsers.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        (u.email?.toLowerCase().includes(q) ?? false),
+    );
   }, [otherUsers, query]);
 
   function toggleUser(userId: string) {
@@ -141,11 +148,11 @@ export function ShareListDialog({
             >
               <ListItemAvatar>
                 <Avatar sx={{ width: 36, height: 36, fontSize: "0.875rem" }}>
-                  {ownerUsername[0]?.toUpperCase() ?? "?"}
+                  {ownerName[0]?.toUpperCase() ?? "?"}
                 </Avatar>
               </ListItemAvatar>
               <ListItemText
-                primary={ownerUsername}
+                primary={ownerName}
                 secondary="Owner"
               />
               <Checkbox edge="end" checked disabled />
@@ -188,10 +195,10 @@ export function ShareListDialog({
                           <Avatar
                             sx={{ width: 36, height: 36, fontSize: "0.875rem" }}
                           >
-                            {u.username[0]?.toUpperCase() ?? "?"}
+                            {u.name[0]?.toUpperCase() ?? "?"}
                           </Avatar>
                         </ListItemAvatar>
-                        <ListItemText primary={u.username} />
+                        <ListItemText primary={u.name} secondary={u.email} />
                         <Checkbox
                           edge="end"
                           checked={checked}
@@ -201,7 +208,9 @@ export function ShareListDialog({
                           }}
                           onClick={(e) => e.stopPropagation()}
                           inputProps={{
-                            "aria-label": `Share with ${u.username}`,
+                            "aria-label": u.email
+                              ? `Share with ${u.name} (${u.email})`
+                              : `Share with ${u.name}`,
                           }}
                         />
                       </ListItemButton>

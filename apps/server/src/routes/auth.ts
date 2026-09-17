@@ -4,10 +4,13 @@ import argon2 from "argon2";
 import {
   authCredentialsSchema,
   changePasswordSchema,
+  displayNameFromEmail,
+  registerSchema,
+  updateProfileSchema,
   type AuthProvider,
   type UserDto,
 } from "@genesis-lists/shared";
-import type { Db, UserRow } from "../db/index.js";
+import { isUniqueViolation, type Db, type UserRow } from "../db/index.js";
 import {
   OIDC_STATE_TTL_MS,
   newOidcStateMaterials,
@@ -35,6 +38,14 @@ function oidcStateExpiry() {
   return new Date(Date.now() + OIDC_STATE_TTL_MS).toISOString();
 }
 
+function validationDetail(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
+  return (
+    error.issues
+      .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
+      .join("; ") || "Invalid request body"
+  );
+}
+
 function disabledOidcSettings(): OidcSettings {
   return {
     enabled: false,
@@ -45,7 +56,8 @@ function disabledOidcSettings(): OidcSettings {
     buttonText: "Sign in with OIDC",
     autoRegister: true,
     autoLaunch: false,
-    usernameClaim: "preferred_username",
+    emailClaim: "email",
+    nameClaim: "name",
     disablePasswordLogin: false,
     redirectUri: "",
   };
@@ -80,14 +92,12 @@ export async function registerAuth(
 
   function toUserDto(userId: string): UserDto | null {
     const row = db
-      .prepare(
-        `SELECT id, username, email, password_hash FROM users WHERE id = ?`,
-      )
+      .prepare(`SELECT id, email, name, password_hash FROM users WHERE id = ?`)
       .get(userId) as
       | {
           id: string;
-          username: string;
-          email: string | null;
+          email: string;
+          name: string;
           password_hash: string | null;
         }
       | undefined;
@@ -104,8 +114,8 @@ export async function registerAuth(
 
     return {
       id: row.id,
-      username: row.username,
       email: row.email,
+      name: row.name,
       authProviders,
     };
   }
@@ -130,15 +140,17 @@ export async function registerAuth(
 
     const row = db
       .prepare(
-        `SELECT u.id AS id, u.username AS username
+        `SELECT u.id AS id, u.email AS email, u.name AS name
          FROM sessions s
          INNER JOIN users u ON u.id = s.user_id
          WHERE s.id = ? AND s.expires_at > ?`,
       )
-      .get(sessionId, nowIso()) as { id: string; username: string } | undefined;
+      .get(sessionId, nowIso()) as
+      | { id: string; email: string; name: string }
+      | undefined;
 
     if (row) {
-      request.user = { id: row.id, username: row.username };
+      request.user = { id: row.id, email: row.email, name: row.name };
     }
   });
 
@@ -192,6 +204,13 @@ export async function registerAuth(
     return id;
   }
 
+  function findUserIdByEmail(email: string): string | undefined {
+    const row = db.prepare(`SELECT id FROM users WHERE email = ?`).get(email) as
+      | { id: string }
+      | undefined;
+    return row?.id;
+  }
+
   function resolveUserFromOidcClaims(claims: OidcClaims): { userId: string } {
     const existingIdentity = db
       .prepare(
@@ -200,31 +219,29 @@ export async function registerAuth(
       .get(claims.issuer, claims.subject) as { user_id: string } | undefined;
 
     if (existingIdentity) {
-      if (claims.email) {
-        db.prepare(`UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email != ?)`).run(
+      // Follow an address change at the IdP, unless it collides with another
+      // account: silently merging two accounts would hand one user the other's data.
+      const holder = findUserIdByEmail(claims.email);
+      if (!holder) {
+        db.prepare(`UPDATE users SET email = ? WHERE id = ?`).run(
           claims.email,
           existingIdentity.user_id,
-          claims.email,
         );
+      } else if (holder !== existingIdentity.user_id) {
+        throw new Error("OIDC_EMAIL_TAKEN");
       }
       return { userId: existingIdentity.user_id };
     }
 
-    const byUsername = db
-      .prepare(`SELECT id FROM users WHERE username = ?`)
-      .get(claims.username) as { id: string } | undefined;
+    // Links an account created before the IdP was connected (ADR 0006).
+    const byEmail = findUserIdByEmail(claims.email);
 
-    if (byUsername) {
+    if (byEmail) {
       db.prepare(
         `INSERT INTO user_identities (id, user_id, issuer, subject, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-      ).run(uuid(), byUsername.id, claims.issuer, claims.subject, nowIso());
-      if (claims.email) {
-        db.prepare(
-          `UPDATE users SET email = ? WHERE id = ? AND (email IS NULL OR email != ?)`,
-        ).run(claims.email, byUsername.id, claims.email);
-      }
-      return { userId: byUsername.id };
+      ).run(uuid(), byEmail, claims.issuer, claims.subject, nowIso());
+      return { userId: byEmail };
     }
 
     if (!oidcSettings.autoRegister) {
@@ -233,9 +250,9 @@ export async function registerAuth(
 
     const userId = uuid();
     db.prepare(
-      `INSERT INTO users (id, username, password_hash, email, created_at)
-       VALUES (?, ?, NULL, ?, ?)`,
-    ).run(userId, claims.username, claims.email, nowIso());
+      `INSERT INTO users (id, email, name, password_hash, created_at)
+       VALUES (?, ?, ?, NULL, ?)`,
+    ).run(userId, claims.email, claims.name, nowIso());
     db.prepare(
       `INSERT INTO user_identities (id, user_id, issuer, subject, created_at)
        VALUES (?, ?, ?, ?, ?)`,
@@ -265,29 +282,33 @@ export async function registerAuth(
       return sendError(reply, 403, "FORBIDDEN", "Registration is closed");
     }
 
-    const parsed = authCredentialsSchema.safeParse(request.body);
+    const parsed = registerSchema.safeParse(request.body);
     if (!parsed.success) {
-      const detail = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
-        .join("; ");
-      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
-    const { username, password } = parsed.data;
-    const existing = db
-      .prepare(`SELECT id FROM users WHERE username = ?`)
-      .get(username);
-    if (existing) {
-      return sendError(reply, 409, "CONFLICT", "Username already taken");
+    const { email, password } = parsed.data;
+    if (findUserIdByEmail(email)) {
+      return sendError(reply, 409, "CONFLICT", "Email already registered");
     }
 
     const id = uuid();
+    const name = parsed.data.name ?? displayNameFromEmail(email);
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
     const createdAt = nowIso();
 
-    db.prepare(
-      `INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, NULL, ?)`,
-    ).run(id, username, passwordHash, createdAt);
+    try {
+      db.prepare(
+        `INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`,
+      ).run(id, email, name, passwordHash, createdAt);
+    } catch (err) {
+      // Hashing the password yields the event loop, so a concurrent request can
+      // take the address between the check above and this insert.
+      if (isUniqueViolation(err)) {
+        return sendError(reply, 409, "CONFLICT", "Email already registered");
+      }
+      throw err;
+    }
 
     const sessionId = createSession(id);
     setSessionCookie(reply, sessionId);
@@ -303,23 +324,20 @@ export async function registerAuth(
 
     const parsed = authCredentialsSchema.safeParse(request.body);
     if (!parsed.success) {
-      const detail = parsed.error.issues
-        .map((i) => `${i.path.join(".") || "body"}: ${i.message}`)
-        .join("; ");
-      return sendError(reply, 400, "VALIDATION_ERROR", detail || "Invalid request body");
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
-    const { username, password } = parsed.data;
-    const row = db
-      .prepare(`SELECT * FROM users WHERE username = ?`)
-      .get(username) as UserRow | undefined;
+    const { email, password } = parsed.data;
+    const row = db.prepare(`SELECT * FROM users WHERE email = ?`).get(email) as
+      | UserRow
+      | undefined;
     if (!row || !row.password_hash) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Invalid username or password");
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid email or password");
     }
 
     const ok = await argon2.verify(row.password_hash, password);
     if (!ok) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Invalid username or password");
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid email or password");
     }
 
     const sessionId = createSession(row.id);
@@ -448,6 +466,28 @@ export async function registerAuth(
     if (!request.user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
+    const user = toUserDto(request.user.id);
+    if (!user) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
+    }
+    return reply.send(user);
+  });
+
+  app.patch("/api/auth/me", async (request, reply) => {
+    if (!request.user) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
+    }
+
+    const parsed = updateProfileSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
+    }
+
+    db.prepare(`UPDATE users SET name = ? WHERE id = ?`).run(
+      parsed.data.name,
+      request.user.id,
+    );
+
     const user = toUserDto(request.user.id);
     if (!user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");

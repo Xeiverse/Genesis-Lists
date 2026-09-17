@@ -4,11 +4,13 @@
 
 ## Auth
 
-- [x] **REQ-AUTH-01** Register with valid username/password → account created, session cookie set, redirected to lists — *API test + browser (360px / 1280px)*
-- [x] **REQ-AUTH-01** Duplicate username → `409 CONFLICT` — *API test*
-- [x] **REQ-AUTH-02** Login success → session; wrong password → `401` — *API test + browser*
+- [x] **REQ-AUTH-01** Register with valid email/password → account created, session cookie set, redirected to lists — *API test + browser (360px / 1280px)*
+- [x] **REQ-AUTH-01** Duplicate email → `409 CONFLICT`, including when it differs only by case and when two registrations for the same address arrive at once — *API test*
+- [x] **REQ-AUTH-01** Display name defaults to the email local part when omitted — *API test*
+- [x] **REQ-AUTH-02** Login success → session; wrong password → `401`; login is case-insensitive in the email — *API test + browser*
 - [x] **REQ-AUTH-03** Logout → subsequent `/api/auth/me` is `401` — *API test + browser*
-- [x] **REQ-AUTH-04** `/api/auth/me` returns `{ id, username }` — *API test*
+- [x] **REQ-AUTH-04** `/api/auth/me` returns `{ id, email, name, authProviders }` — *API test*
+- [x] **REQ-AUTH-07** `PATCH /api/auth/me` updates the display name; it is what other users see in the directory; control characters and bidi overrides are refused — *API test*
 - [x] **REQ-AUTH-05** Change password with correct current → `204`; wrong current → `401`; login with new password works; other sessions for that user are deleted and the current session stays signed in — *API test (other-session revoke) + browser (Settings)*
 - [x] **REQ-AUTH-06** `ALLOW_REGISTRATION` unset/`bootstrap` allows the first account then `403 FORBIDDEN`; `false` rejects even with zero users; `GET /api/auth/registration` returns `{ open }` — *API test*
 
@@ -33,6 +35,7 @@
 - [x] **REQ-UI-01** Login, create list, add/toggle/delete item usable at mobile width and desktop — *browser at 360px and 1280px (register validation, search, settings, guest redirects)*
 - [x] **REQ-OPS-01** `docker compose up` serves app; data survives container recreate (volume) — *Compose build/up; `/api/health`; register + list + item persisted after `--force-recreate`*
 - [x] **REQ-OPS-02** `GET /api/health` returns version and `schemaVersion` after `SELECT 1` — *API test*
+- [x] Schema v4 keeps accounts whose username was an email (with lists and shares intact) and deletes the rest along with their lists, items, memberships, sessions, and identities. A kept account whose username was not itself an address keeps that username as its display name — *migration test*
 
 ## Contract
 

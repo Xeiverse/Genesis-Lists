@@ -63,7 +63,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), {
       status: "ok",
       version: "1.0.0",
-      schemaVersion: 3,
+      schemaVersion: 4,
     });
   });
 
@@ -101,7 +101,7 @@ describe("Genesis Lists API contract", async () => {
     const register = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "ab", password: "short" },
+      payload: { email: "not-an-email", password: "short" },
     });
     assert.equal(register.statusCode, 400);
     assert.equal(register.json().error.code, "VALIDATION_ERROR");
@@ -109,7 +109,7 @@ describe("Genesis Lists API contract", async () => {
     const login = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "alice", password: "short" },
+      payload: { email: "alice@example.com", password: "short" },
     });
     assert.equal(login.statusCode, 400);
     assert.equal(login.json().error.code, "VALIDATION_ERROR");
@@ -120,7 +120,7 @@ describe("Genesis Lists API contract", async () => {
       method: "POST",
       url: "/api/auth/register",
       headers: { "content-type": "application/json" },
-      payload: { username: "alice", password: "x".repeat(BODY_LIMIT_BYTES) },
+      payload: { email: "alice@example.com", password: "x".repeat(BODY_LIMIT_BYTES) },
     });
     assert.equal(res.statusCode, 400);
     assert.equal(res.json().error.code, "VALIDATION_ERROR");
@@ -130,11 +130,12 @@ describe("Genesis Lists API contract", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "alice", password: "password1" },
+      payload: { email: "alice@example.com", password: "password1" },
     });
     assert.equal(res.statusCode, 201);
     const body = res.json();
-    assert.equal(body.username, "alice");
+    assert.equal(body.email, "alice@example.com");
+    assert.equal(body.name, "alice");
     assert.ok(body.id);
     cookieA = getCookie(res)!;
     assert.ok(cookieA.includes("genesis_session="));
@@ -161,21 +162,58 @@ describe("Genesis Lists API contract", async () => {
     assert.equal(invalid.json().error.code, "VALIDATION_ERROR");
   });
 
-  await it("duplicate username conflicts", async () => {
+  await it("duplicate email conflicts", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "alice", password: "password1" },
+      payload: { email: "alice@example.com", password: "password1" },
     });
     assert.equal(res.statusCode, 409);
     assert.equal(res.json().error.code, "CONFLICT");
+  });
+
+  await it("racing registrations for one email conflict rather than crash", async () => {
+    const [first, second] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "race@example.com", password: "password1" },
+      }),
+      app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "race@example.com", password: "password1" },
+      }),
+    ]);
+
+    const codes = [first.statusCode, second.statusCode].sort();
+    assert.deepEqual(codes, [201, 409]);
+    const loser = first.statusCode === 409 ? first : second;
+    assert.equal(loser.json().error.code, "CONFLICT");
+  });
+
+  await it("email case and surrounding space do not make a second account", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "  ALICE@Example.com ", password: "password1" },
+    });
+    assert.equal(res.statusCode, 409);
+
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: "Alice@EXAMPLE.com", password: "password1" },
+    });
+    assert.equal(login.statusCode, 200);
+    assert.equal(login.json().email, "alice@example.com");
   });
 
   await it("register bob", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "bob", password: "password1" },
+      payload: { email: "bob@example.com", password: "password1" },
     });
     assert.equal(res.statusCode, 201);
     cookieB = getCookie(res)!;
@@ -188,9 +226,88 @@ describe("Genesis Lists API contract", async () => {
       headers: { cookie: cookieA },
     });
     assert.equal(res.statusCode, 200);
-    assert.equal(res.json().username, "alice");
+    assert.equal(res.json().email, "alice@example.com");
+    assert.equal(res.json().name, "alice");
     assert.deepEqual(res.json().authProviders, ["local"]);
-    assert.equal(res.json().email, null);
+  });
+
+  await it("PATCH /api/auth/me renames the account", async () => {
+    const unauth = await app.inject({
+      method: "PATCH",
+      url: "/api/auth/me",
+      payload: { name: "Alice" },
+    });
+    assert.equal(unauth.statusCode, 401);
+
+    const invalid = await app.inject({
+      method: "PATCH",
+      url: "/api/auth/me",
+      headers: { cookie: cookieA },
+      payload: { name: "   " },
+    });
+    assert.equal(invalid.statusCode, 400);
+    assert.equal(invalid.json().error.code, "VALIDATION_ERROR");
+
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/api/auth/me",
+      headers: { cookie: cookieA },
+      payload: { name: "  Alice Smith  " },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().name, "Alice Smith");
+    assert.equal(res.json().email, "alice@example.com");
+
+    const directory = await app.inject({
+      method: "GET",
+      url: "/api/users",
+      headers: { cookie: cookieB },
+    });
+    const names = (directory.json().users as Array<{ name: string }>).map(
+      (u) => u.name,
+    );
+    assert.ok(names.includes("Alice Smith"));
+
+    const restore = await app.inject({
+      method: "PATCH",
+      url: "/api/auth/me",
+      headers: { cookie: cookieA },
+      payload: { name: "alice" },
+    });
+    assert.equal(restore.statusCode, 200);
+  });
+
+  await it("display names may not carry control or bidi characters", async () => {
+    // Names are not unique, so a name that renders as someone else's is a
+    // mis-sharing risk in the picker.
+    for (const name of ["bob\nadmin", "alice\u202ebob", "carol\u2066x"]) {
+      const res = await app.inject({
+        method: "PATCH",
+        url: "/api/auth/me",
+        headers: { cookie: cookieA },
+        payload: { name },
+      });
+      assert.equal(res.statusCode, 400, `${JSON.stringify(name)} must be refused`);
+      assert.equal(res.json().error.code, "VALIDATION_ERROR");
+    }
+
+    const register = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: {
+        email: "spoof@example.com",
+        password: "password1",
+        name: "alice\u202e",
+      },
+    });
+    assert.equal(register.statusCode, 400);
+
+    const me = await app.inject({
+      method: "GET",
+      url: "/api/auth/me",
+      headers: { cookie: cookieA },
+    });
+    assert.equal(me.json().name, "alice", "a refused rename must not take effect");
   });
 
   await it("create and list lists", async () => {
@@ -205,7 +322,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(create.json().previewItems, []);
     assert.equal(create.json().itemCount, 0);
     assert.equal(create.json().isOwner, true);
-    assert.equal(create.json().ownerUsername, "alice");
+    assert.equal(create.json().ownerName, "alice");
 
     const list = await app.inject({
       method: "GET",
@@ -218,7 +335,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(list.json().lists[0].previewItems, []);
     assert.equal(list.json().lists[0].itemCount, 0);
     assert.equal(list.json().lists[0].isOwner, true);
-    assert.equal(list.json().lists[0].ownerUsername, "alice");
+    assert.equal(list.json().lists[0].ownerName, "alice");
   });
 
   await it("bob cannot see alice lists", async () => {
@@ -502,10 +619,10 @@ describe("Genesis Lists API contract", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "bob", password: "password1" },
+      payload: { email: "bob@example.com", password: "password1" },
     });
     assert.equal(res.statusCode, 200);
-    assert.equal(res.json().username, "bob");
+    assert.equal(res.json().email, "bob@example.com");
     cookieB = getCookie(res)!;
   });
 
@@ -521,7 +638,7 @@ describe("Genesis Lists API contract", async () => {
     const otherSession = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "bob", password: "password1" },
+      payload: { email: "bob@example.com", password: "password1" },
     });
     assert.equal(otherSession.statusCode, 200);
     const cookieOther = getCookie(otherSession)!;
@@ -551,14 +668,14 @@ describe("Genesis Lists API contract", async () => {
     const oldLogin = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "bob", password: "password1" },
+      payload: { email: "bob@example.com", password: "password1" },
     });
     assert.equal(oldLogin.statusCode, 401);
 
     const newLogin = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "bob", password: "password2" },
+      payload: { email: "bob@example.com", password: "password2" },
     });
     assert.equal(newLogin.statusCode, 200);
   });
@@ -567,7 +684,7 @@ describe("Genesis Lists API contract", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { username: "bob", password: "wrongpass" },
+      payload: { email: "bob@example.com", password: "wrongpass" },
     });
     assert.equal(res.statusCode, 401);
     assert.equal(res.json().error.code, "UNAUTHORIZED");
@@ -628,7 +745,7 @@ describe("registration gate", async () => {
       const first = await app.inject({
         method: "POST",
         url: "/api/auth/register",
-        payload: { username: "owner", password: "password1" },
+        payload: { email: "owner@example.com", password: "password1" },
       });
       assert.equal(first.statusCode, 201);
 
@@ -641,7 +758,7 @@ describe("registration gate", async () => {
       const second = await app.inject({
         method: "POST",
         url: "/api/auth/register",
-        payload: { username: "guest", password: "password1" },
+        payload: { email: "guest@example.com", password: "password1" },
       });
       assert.equal(second.statusCode, 403);
       assert.equal(second.json().error.code, "FORBIDDEN");
@@ -659,7 +776,7 @@ describe("registration gate", async () => {
       const res = await app.inject({
         method: "POST",
         url: "/api/auth/register",
-        payload: { username: "owner", password: "password1" },
+        payload: { email: "owner@example.com", password: "password1" },
       });
       assert.equal(res.statusCode, 403);
       assert.equal(res.json().error.code, "FORBIDDEN");
@@ -675,8 +792,8 @@ describe("OIDC auth", async () => {
       exchange: (callbackUrl: URL) => {
         issuer: string;
         subject: string;
-        username: string;
-        email: string | null;
+        email: string;
+        name: string;
       };
     },
     run: (app: FastifyInstance) => Promise<void>,
@@ -692,7 +809,8 @@ describe("OIDC auth", async () => {
       buttonText: "Sign in with Authentik",
       autoRegister: opts.autoRegister ?? true,
       autoLaunch: true,
-      usernameClaim: "preferred_username",
+      emailClaim: "email",
+      nameClaim: "name",
       disablePasswordLogin: opts.disablePasswordLogin ?? false,
       redirectUri: "https://lists.example.com/api/auth/oidc/callback",
     };
@@ -752,14 +870,14 @@ describe("OIDC auth", async () => {
         const login = await app.inject({
           method: "POST",
           url: "/api/auth/login",
-          payload: { username: "alice", password: "password1" },
+          payload: { email: "alice@example.com", password: "password1" },
         });
         assert.equal(login.statusCode, 403);
 
         const register = await app.inject({
           method: "POST",
           url: "/api/auth/register",
-          payload: { username: "alice", password: "password1" },
+          payload: { email: "alice@example.com", password: "password1" },
         });
         assert.equal(register.statusCode, 403);
       },
@@ -772,8 +890,8 @@ describe("OIDC auth", async () => {
         exchange: () => ({
           issuer: "https://idp.example.com/application/o/genesis",
           subject: "sub-alice-1",
-          username: "alice",
           email: "alice@example.com",
+          name: "Alice Example",
         }),
       },
       async (app) => {
@@ -805,8 +923,8 @@ describe("OIDC auth", async () => {
           headers: { cookie },
         });
         assert.equal(me.statusCode, 200);
-        assert.equal(me.json().username, "alice");
         assert.equal(me.json().email, "alice@example.com");
+        assert.equal(me.json().name, "Alice Example");
         assert.deepEqual(me.json().authProviders, ["oidc"]);
 
         const change = await app.inject({
@@ -826,8 +944,8 @@ describe("OIDC auth", async () => {
         exchange: () => ({
           issuer: "https://idp.example.com/application/o/genesis",
           subject: "sub-csrf",
-          username: "csrfuser",
-          email: null,
+          email: "csrf@example.com",
+          name: "Csrf",
         }),
       },
       async (app) => {
@@ -849,21 +967,21 @@ describe("OIDC auth", async () => {
     );
   });
 
-  await it("OIDC merges onto existing local username", async () => {
+  await it("OIDC links onto an account registered before the IdP", async () => {
     await withOidcApp(
       {
         exchange: () => ({
           issuer: "https://idp.example.com/application/o/genesis",
           subject: "sub-bob-9",
-          username: "bob",
           email: "bob@example.com",
+          name: "Bob From The IdP",
         }),
       },
       async (app) => {
         const register = await app.inject({
           method: "POST",
           url: "/api/auth/register",
-          payload: { username: "bob", password: "password1" },
+          payload: { email: "bob@example.com", password: "password1" },
         });
         assert.equal(register.statusCode, 201);
         const localId = register.json().id;
@@ -886,20 +1004,79 @@ describe("OIDC auth", async () => {
         });
         assert.equal(me.json().id, localId);
         assert.equal(me.json().email, "bob@example.com");
+        // The IdP name claim must not overwrite a name the account already had.
+        assert.equal(me.json().name, "bob");
         assert.deepEqual(me.json().authProviders.sort(), ["local", "oidc"]);
       },
     );
   });
 
-  await it("OIDC auto-register off rejects unknown username", async () => {
+  await it("OIDC refuses to move an email onto an account that already holds it", async () => {
+    let call = 0;
+    await withOidcApp(
+      {
+        exchange: () => {
+          call += 1;
+          return {
+            issuer: "https://idp.example.com/application/o/genesis",
+            subject: "sub-dave",
+            email: call === 1 ? "dave@example.com" : "carol@example.com",
+            name: "Dave",
+          };
+        },
+      },
+      async (app) => {
+        const carol = await app.inject({
+          method: "POST",
+          url: "/api/auth/register",
+          payload: { email: "carol@example.com", password: "password1" },
+        });
+        const carolId = carol.json().id;
+
+        async function signInWithOidc() {
+          const start = await app.inject({
+            method: "GET",
+            url: "/api/auth/oidc/start",
+          });
+          const state = new URL(
+            start.headers.location as string,
+          ).searchParams.get("state")!;
+          const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
+          return app.inject({
+            method: "GET",
+            url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+            headers: { cookie: oidcCookie },
+          });
+        }
+
+        const first = await signInWithOidc();
+        assert.equal(first.headers.location, "/");
+
+        const second = await signInWithOidc();
+        assert.equal(second.headers.location, "/login?error=oidc");
+        assert.equal(pickCookie(second, "genesis_session"), undefined);
+
+        const carolLogin = await app.inject({
+          method: "POST",
+          url: "/api/auth/login",
+          payload: { email: "carol@example.com", password: "password1" },
+        });
+        assert.equal(carolLogin.statusCode, 200);
+        assert.equal(carolLogin.json().id, carolId);
+        assert.deepEqual(carolLogin.json().authProviders, ["local"]);
+      },
+    );
+  });
+
+  await it("OIDC auto-register off rejects an unknown email", async () => {
     await withOidcApp(
       {
         autoRegister: false,
         exchange: () => ({
           issuer: "https://idp.example.com/application/o/genesis",
           subject: "sub-nobody",
-          username: "nobody",
-          email: null,
+          email: "nobody@example.com",
+          name: "Nobody",
         }),
       },
       async (app) => {
@@ -946,7 +1123,7 @@ describe("shared lists", async () => {
     const alice = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "alice", password: "password1" },
+      payload: { email: "alice@example.com", password: "password1" },
     });
     cookieAlice = getCookie(alice)!;
     aliceId = alice.json().id;
@@ -954,7 +1131,7 @@ describe("shared lists", async () => {
     const bob = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "bob", password: "password1" },
+      payload: { email: "bob@example.com", password: "password1" },
     });
     cookieBob = getCookie(bob)!;
     bobId = bob.json().id;
@@ -962,7 +1139,7 @@ describe("shared lists", async () => {
     const carol = await app.inject({
       method: "POST",
       url: "/api/auth/register",
-      payload: { username: "carol", password: "password1" },
+      payload: { email: "carol@example.com", password: "password1" },
     });
     cookieCarol = getCookie(carol)!;
     carolId = carol.json().id;
@@ -995,11 +1172,20 @@ describe("shared lists", async () => {
       headers: { cookie: cookieAlice },
     });
     assert.equal(res.statusCode, 200);
-    const users = res.json().users as Array<{ id: string; username: string }>;
+    const users = res.json().users as Array<{
+      id: string;
+      name: string;
+      email?: string;
+    }>;
     assert.equal(users.length, 3);
     assert.deepEqual(
-      users.map((u) => u.username).sort(),
+      users.map((u) => u.name).sort(),
       ["alice", "bob", "carol"],
+    );
+    assert.deepEqual(
+      users.map((u) => u.email).sort(),
+      ["alice@example.com", "bob@example.com", "carol@example.com"],
+      "display names are not unique, so the address is what tells people apart",
     );
     assert.ok(users.some((u) => u.id === aliceId));
     assert.ok(users.some((u) => u.id === bobId));
@@ -1016,7 +1202,7 @@ describe("shared lists", async () => {
     assert.equal(put.statusCode, 200);
     assert.equal(put.json().members.length, 1);
     assert.equal(put.json().members[0].userId, bobId);
-    assert.equal(put.json().members[0].username, "bob");
+    assert.equal(put.json().members[0].name, "bob");
 
     const get = await app.inject({
       method: "GET",
@@ -1035,7 +1221,7 @@ describe("shared lists", async () => {
     assert.equal(bobLists.json().lists.length, 1);
     assert.equal(bobLists.json().lists[0].id, sharedListId);
     assert.equal(bobLists.json().lists[0].isOwner, false);
-    assert.equal(bobLists.json().lists[0].ownerUsername, "alice");
+    assert.equal(bobLists.json().lists[0].ownerName, "alice");
 
     const carolLists = await app.inject({
       method: "GET",
@@ -1064,7 +1250,7 @@ describe("shared lists", async () => {
     assert.equal(rename.statusCode, 200);
     assert.equal(rename.json().name, "Household shop");
     assert.equal(rename.json().isOwner, false);
-    assert.equal(rename.json().ownerUsername, "alice");
+    assert.equal(rename.json().ownerName, "alice");
 
     const tick = await app.inject({
       method: "PATCH",
@@ -1228,5 +1414,57 @@ describe("shared lists", async () => {
     });
     assert.equal(clearAll.statusCode, 200);
     assert.equal(clearAll.json().members.length, 0);
+  });
+});
+
+describe("directory email visibility", async () => {
+  await it("DIRECTORY_SHOW_EMAILS=false strips addresses but keeps the directory usable", async () => {
+    const dbPath = path.join(os.tmpdir(), `genesis-directory-${Date.now()}.db`);
+    const app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret",
+      cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
+      directoryShowEmails: false,
+    });
+    await app.ready();
+
+    try {
+      const alice = await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "alice@example.com", password: "password1" },
+      });
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { email: "bob@example.com", password: "password1" },
+      });
+
+      const res = await app.inject({
+        method: "GET",
+        url: "/api/users",
+        headers: { cookie: getCookie(alice)! },
+      });
+      assert.equal(res.statusCode, 200);
+      const users = res.json().users as Array<{ id: string; name: string; email?: string }>;
+      assert.equal(users.length, 2, "sharing still needs the full directory");
+      assert.ok(
+        users.every((u) => u.email === undefined),
+        "no address may be returned when the operator opts out",
+      );
+      assert.deepEqual(users.map((u) => u.name).sort(), ["alice", "bob"]);
+    } finally {
+      await app.close();
+      for (const suffix of ["", "-wal", "-shm"]) {
+        const p = dbPath + suffix;
+        try {
+          if (fs.existsSync(p)) fs.unlinkSync(p);
+        } catch {
+          // ignore
+        }
+      }
+    }
   });
 });

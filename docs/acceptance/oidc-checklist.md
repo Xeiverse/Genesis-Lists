@@ -12,12 +12,13 @@ Verify against [01-requirements.md](../01-requirements.md) (`REQ-OIDC-*`) and `d
 
 - [x] **REQ-OIDC-02** OIDC start redirects to the IdP; successful callback sets `genesis_session` and redirects to `/` — *API test with mock provider*
 - [x] **REQ-OIDC-03** Second login with the same `(issuer, sub)` reuses the same local user — *covered by identity lookup before merge*
-- [x] **REQ-OIDC-04** Existing local user `alice` links when IdP username claim is `alice` — *API test (bob merge)*
-- [x] **REQ-OIDC-04** Unknown username with `OIDC_AUTO_REGISTER=true` creates a user with null password and optional email — *API test*
-- [x] **REQ-OIDC-04** Unknown username with `OIDC_AUTO_REGISTER=false` fails auth without creating a user — *API test*
-- [ ] **REQ-OIDC-04** Invalid username claim (fails local username rules) fails auth — *unit path via `extractOidcClaims`; exercise against a live IdP*
+- [x] **REQ-OIDC-04** Existing local account registered before the IdP was connected links when the IdP email claim matches its email, case-insensitively — *API test (bob merge)*
+- [x] **REQ-OIDC-04** Unknown email with `OIDC_AUTO_REGISTER=true` creates a user with null password, the claimed email, and a display name from the name claim — *API test*
+- [x] **REQ-OIDC-04** Unknown email with `OIDC_AUTO_REGISTER=false` fails auth without creating a user — *API test*
+- [x] **REQ-OIDC-04** Missing or malformed email claim fails auth — *unit test via `extractOidcClaims`*
+- [x] **REQ-OIDC-04** `email_verified` that is present and not affirmative (`false`, `"false"`, `0`) fails auth; an absent or affirmative (`true`, `"true"`, `1`) claim is accepted — *unit test via `extractOidcClaims`*
 - [ ] **REQ-OIDC-07** Auto-launch redirects from `/login` unless `?autoLaunch=0`; `?autoLaunch=1` forces it — *UI*
-- [x] **REQ-OIDC-08** Email claim stored and returned from `/api/auth/me` when present — *API test*
+- [x] **REQ-OIDC-08** Email claim stored and returned from `/api/auth/me` — *API test*
 
 ## Password disable
 

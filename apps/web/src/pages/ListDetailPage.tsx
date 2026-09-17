@@ -136,7 +136,7 @@ export function ListDetailPage() {
   const { user } = useAuth();
   const [title, setTitle] = useState("List");
   const [isOwner, setIsOwner] = useState<boolean | null>(null);
-  const [ownerUsername, setOwnerUsername] = useState("");
+  const [ownerName, setOwnerName] = useState("");
   const [items, setItems] = useState<ListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState("");
@@ -169,7 +169,7 @@ export function ListDetailPage() {
       }
       setTitle(list.name);
       setIsOwner(list.isOwner);
-      setOwnerUsername(list.ownerUsername);
+      setOwnerName(list.ownerName);
       setItems(itemsRes.items);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Failed to load list");
@@ -613,8 +613,8 @@ export function ListDetailPage() {
       <ShareListDialog
         open={shareOpen}
         listId={id}
-        ownerUsername={ownerUsername || user?.username || ""}
-        ownerUserId={user?.id}
+        ownerName={ownerName || user?.name || ""}
+        currentUserId={user?.id}
         onClose={() => setShareOpen(false)}
         onError={setError}
       />

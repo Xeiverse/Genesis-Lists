@@ -13,8 +13,9 @@ import { api, ApiError } from "./api";
 type AuthState = {
   user: UserDto | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name?: string) => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -44,13 +45,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const u = await api.login(username, password);
+  const login = useCallback(async (email: string, password: string) => {
+    const u = await api.login(email, password);
     setUser(u);
   }, []);
 
-  const register = useCallback(async (username: string, password: string) => {
-    const u = await api.register(username, password);
+  const register = useCallback(
+    async (email: string, password: string, name?: string) => {
+      const u = await api.register(email, password, name);
+      setUser(u);
+    },
+    [],
+  );
+
+  const updateProfile = useCallback(async (name: string) => {
+    const u = await api.updateProfile(name);
     setUser(u);
   }, []);
 
@@ -60,8 +69,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout],
+    () => ({ user, loading, login, register, updateProfile, logout }),
+    [user, loading, login, register, updateProfile, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

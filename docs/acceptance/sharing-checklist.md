@@ -9,7 +9,7 @@ Maps to `REQ-SHARE-*` in [01-requirements.md](../01-requirements.md). Automated 
 - [x] **REQ-SHARE-03** Member `DELETE /api/lists/{id}` → `403`; member `GET`/`PUT` members → `403` — *API test*
 - [x] **REQ-SHARE-04** Owner removes a user from the member set; that user no longer sees the list; direct access → `404` — *API test*
 - [x] **REQ-SHARE-05** Member `DELETE /api/lists/{id}/members/me` → `204` then list gone; owner leave → `400` — *API test + browser (Leave list)*
-- [x] **REQ-SHARE-06** `GET /api/users` returns all users’ id and display name for a signed-in caller, and no email addresses — *API test*
+- [x] **REQ-SHARE-06** `GET /api/users` returns every account's id, display name and email for a signed-in caller; `DIRECTORY_SHOW_EMAILS=false` omits the addresses while still returning every account — *API test*
 
 ## Related list rules
 

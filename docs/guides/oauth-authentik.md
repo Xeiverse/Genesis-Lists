@@ -104,7 +104,7 @@ The `email` scope must be granted to the provider, and every Authentik user sign
 | `OIDC_EMAIL_CLAIM` | `email` | The account identifier. Must be a valid address; it is matched (lower-cased) against `users.email` to link or create the local account |
 | `OIDC_NAME_CLAIM` | `name` | Display name used when creating a new account. Falls back to the part of the email before the `@`. Only applied at creation, so a user's own renames are not overwritten |
 
-Genesis Lists refuses the login if Authentik asserts `email_verified: false`. An absent claim is accepted.
+Genesis Lists refuses the login unless `email_verified` is absent or affirmative. An IdP that serializes the flag as the string `"false"` is treated as unverified.
 
 ## 5. Troubleshooting
 
@@ -112,7 +112,7 @@ Genesis Lists refuses the login if Authentik asserts `email_verified: false`. An
 |---------|----------------|
 | Container exits; OIDC discovery error | Issuer URL, trailing slash, TLS/CA inside the container, proxy not returning HTML/login page for `.well-known` |
 | Redirect URI mismatch | Authentik Strict URI must equal `PUBLIC_BASE_URL` + `/api/auth/oidc/callback` (or `OIDC_REDIRECT_URI`) |
-| Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim (check the `email` scope and that the user has an address); `email_verified: false`; `OIDC_AUTO_REGISTER=false` with no matching local user |
+| Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim (check the `email` scope and that the user has an address); `email_verified` present and not affirmative; `OIDC_AUTO_REGISTER=false` with no matching local user |
 | Password form still shown | `OIDC_DISABLE_PASSWORD_LOGIN` only applies when `OIDC_ENABLED=true`; recreate container after env change |
 | Encryption / token errors with Authentik | Leave the provider **encryption key** empty; keep a signing key |
 

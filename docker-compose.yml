@@ -13,6 +13,7 @@ services:
       STATIC_DIR: /app/web
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      DIRECTORY_SHOW_EMAILS: ${DIRECTORY_SHOW_EMAILS:-true}
       APP_VERSION: ${GENESIS_LISTS_VERSION:-0.2.0}
       NODE_ENV: production
       PORT: 3000

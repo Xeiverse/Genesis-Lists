@@ -17,7 +17,7 @@
 - Redirect URI is fixed to `{PUBLIC_BASE_URL}/api/auth/oidc/callback` or an explicit `OIDC_REDIRECT_URI` — never taken from user input.
 - IdP tokens are used only during the callback exchange; they are not persisted.
 - Email claims must satisfy the same rules as local registration and are normalized the same way before merge or auto-register. A login with a missing or malformed email claim is refused.
-- A login is refused when the IdP asserts `email_verified: false`. An absent `email_verified` claim is accepted, because not every IdP emits it.
+- A login is refused unless `email_verified` is absent or affirmative. An absent claim is accepted because not every IdP emits it; anything present must say `true` (or `"true"` / `1` / `"1"`), so an IdP that serializes the flag as the string `"false"` is not mistaken for a verifying one. Note that the flag is read under its standard name even when `OIDC_EMAIL_CLAIM` points at a non-standard claim, where it may describe a different address.
 - **Linking by email trusts the IdP.** On first OIDC login, an identity whose email matches an existing local account takes over that account — that is what lets an instance adopt an IdP after accounts already exist. An IdP that lets users set an arbitrary, unverified email can therefore take over a local account. Only connect an IdP you control, and prefer one that verifies addresses. See [ADR 0006](adr/0006-email-login-identifier.md).
 - `OIDC_CLIENT_SECRET` and related secrets live in env; never commit them.
 - Startup fails if `OIDC_ENABLED=true` but discovery or required env is invalid.
@@ -39,10 +39,11 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 
 ## User directory
 
-- `GET /api/users` returns every account’s `id` and display `name` to any signed-in user.
-- **Email addresses are never returned for other accounts.** Only `GET /api/auth/me` reveals an email, and only the caller's own. Display names are deliberately the sharing label so that adopting email logins did not turn the directory into an address book.
+- `GET /api/users` returns every account’s `id`, display `name`, and `email` to any signed-in user.
+- **The address is what makes the share picker unambiguous.** Display names are not unique and anyone can rename themselves onto someone else's, so without an address two rows in the picker can be indistinguishable at the moment an owner grants access. Display names additionally reject control characters and bidi overrides, which would otherwise let one name render as another.
+- `DIRECTORY_SHOW_EMAILS=false` omits `email` from the response for operators who prefer the ambiguity to the exposure. The directory stays fully populated, because there is no admin role to fall back on and sharing needs it (see [ADR 0006](adr/0006-email-login-identifier.md)).
 - Intended for household / small self-host installs so the share dialog can list people to tick.
-- Do not expose a public Genesis Lists instance without understanding that all display names are visible to every account, and that users may put identifying information in them.
+- Do not expose a public Genesis Lists instance without understanding that every signed-in account can read every address on it.
 
 ## Threat notes
 
@@ -57,9 +58,11 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Secret leakage | `SESSION_SECRET` / `OIDC_CLIENT_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |
 | Open registration | `ALLOW_REGISTRATION` (see [self-hosting](06-self-hosting.md)). Unset/`bootstrap` closes after the first account. A public instance with registration open lets anyone create accounts |
 | Oversize payloads | 16 KiB JSON body limit |
-| Display-name enumeration via directory | Accepted for self-host sharing UX; login identifiers (emails) are not exposed, so the directory does not hand out credentials material. Keep instances private if even names are unacceptable |
-| Account takeover via IdP email spoofing | Refuse `email_verified: false`; document that email linking trusts the IdP; operators should only connect IdPs they control |
+| Address enumeration via directory | Accepted for self-host sharing UX: an unambiguous share picker needs the address. `DIRECTORY_SHOW_EMAILS=false` removes it at the cost of indistinguishable rows. Keep instances private if neither trade-off is acceptable |
+| Display-name spoofing in the share picker | Names are not unique and are freely changeable, so the address is shown alongside; control characters and bidi overrides are rejected so a name cannot render as another |
+| Account takeover via IdP email spoofing | Refuse any `email_verified` that is present and not affirmative; document that email linking trusts the IdP; operators should only connect IdPs they control |
 | Registration email enumeration | `409 CONFLICT` on register reveals that an address is registered. Accepted: closed/bootstrap registration is the default, and rate limiting belongs at the reverse proxy |
+| Login timing enumeration | An unknown address returns before argon2 runs, so response time also reveals whether an address is registered. Accepted on the same terms as the `409` above; rate-limit `/api/auth/*` at the reverse proxy |
 
 ## Out of scope for current security features
 

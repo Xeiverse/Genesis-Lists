@@ -48,7 +48,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/users` | Yes | Directory of all users `{ id, name }[]` for the share picker (self-host). Never returns other users' email addresses |
+| GET | `/api/users` | Yes | Directory of all users `{ id, name, email }[]` for the share picker (self-host). Display names are not unique, so the address is what tells people apart; `email` is omitted when the operator sets `DIRECTORY_SHOW_EMAILS=false` |
 
 ### Lists
 

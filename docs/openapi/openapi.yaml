@@ -289,9 +289,10 @@ paths:
       operationId: listUsers
       summary: List all users on the instance
       description: >
-        Self-host directory for the share picker. Returns id and display name for every
-        account. Signed-in users can see all display names on the instance.
-        Email addresses are never returned for other users.
+        Self-host directory for the share picker. Returns id, display name, and
+        email for every account so that two people sharing a name can still be
+        told apart. Signed-in users can see all display names and addresses on
+        the instance. `email` is omitted when `DIRECTORY_SHOW_EMAILS=false`.
       tags: [Users]
       security:
         - sessionCookie: []
@@ -728,12 +729,13 @@ components:
         - $ref: '#/components/schemas/AuthCredentials'
         - type: object
           properties:
-            name:
-              type: string
-              minLength: 1
-              maxLength: 64
-              description: >
-                Optional display name. Defaults to the local part of the email.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >
+            Optional display name. Defaults to the local part of the email.
+            Control characters and bidi overrides are refused.
 
     UpdateProfileRequest:
       type: object
@@ -743,6 +745,9 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+          description: >
+            Display name shown to other users. Control characters and bidi
+            overrides are refused. Not unique.
 
     ChangePasswordRequest:
       type: object
@@ -785,14 +790,21 @@ components:
       type: object
       required: [id, name]
       description: >
-        Share-picker directory entry from GET /api/users. Display name only:
-        no email address and no authProviders.
+        Share-picker directory entry from GET /api/users. Display names are not
+        unique, so `email` is included by default so two people sharing a name
+        can still be told apart. `email` is omitted when the operator sets
+        `DIRECTORY_SHOW_EMAILS=false`. Never carries authProviders.
       properties:
         id:
           type: string
           format: uuid
         name:
           type: string
+        email:
+          type: string
+          format: email
+          description: >
+            Login identifier. Present unless `DIRECTORY_SHOW_EMAILS=false`.
 
     ListItemPreview:
       type: object

@@ -55,11 +55,11 @@ erDiagram
 |--------|------|-------------|-------|
 | `id` | text | PK | UUID |
 | `email` | text | UNIQUE, NOT NULL | Login identifier; stored trimmed and lower-cased, so uniqueness is case-insensitive |
-| `name` | text | NOT NULL | Display name shown in the UI; 1–64 chars; **not** unique; defaults to the email local part |
+| `name` | text | NOT NULL | Display name shown in the UI; 1–64 chars; **not** unique; no control characters or bidi overrides; defaults to the email local part |
 | `password_hash` | text | NULL | argon2id hash when set; null for OIDC-only users; never returned by API |
 | `created_at` | text (ISO-8601) | NOT NULL | UTC |
 
-A user's own email is returned by `GET /api/auth/me` only. Other users are exposed by `id` and `name`; see [07-security.md](07-security.md).
+`GET /api/users` exposes `id`, `name`, and `email` to any signed-in user, because non-unique names alone cannot tell two people apart in the share picker. `DIRECTORY_SHOW_EMAILS=false` drops `email` from that response. See [07-security.md](07-security.md).
 
 ### `user_identities`
 
@@ -119,7 +119,7 @@ Unique membership is enforced by the composite primary key `(list_id, user_id)`.
 ## OIDC identity rules
 
 1. Lookup order on callback: `(issuer, subject)` → else merge by email claim → else auto-register if enabled.
-2. The email from the configured claim must satisfy the same rules as local registration, and is normalized the same way before comparison. A missing or malformed claim, or `email_verified: false`, fails the login.
+2. The email from the configured claim must satisfy the same rules as local registration, and is normalized the same way before comparison. A missing or malformed claim fails the login, as does an `email_verified` claim that is present and not affirmative.
 3. Merging by email is what links an account created before the IdP was connected to its IdP counterpart.
 4. Auto-register sets `name` from the configured name claim, falling back to the email local part.
 5. When a linked identity presents an email that another account already holds, the email is left unchanged rather than merging the two accounts.
@@ -138,7 +138,8 @@ Applied schema versions are stored in `schema_migrations(version, applied_at)`. 
 Migration 4 rebuilds `users`. A pre-v4 account is carried over only if an email address can be recovered for it:
 
 - The username is used when it is already a valid address, so password logins keep working. Pre-v4 usernames were restricted to `[a-zA-Z0-9_-]`, so this only applies to a hand-edited database. Otherwise the v3 `email` column is used, which rescues accounts that signed in through an IdP. In practice that means local password accounts are removed and IdP-linked accounts survive.
-- For a carried-over account, `email` is that address trimmed and lower-cased, `name` is the email local part, and `password_hash` and `created_at` are unchanged. Lists, items, memberships, sessions, and identity rows survive.
+- For a carried-over account, `email` is that address trimmed and lower-cased, and `password_hash` and `created_at` are unchanged. Lists, items, memberships, sessions, and identity rows survive.
+- `name` is the old username, so the account keeps the label other people knew it by. When the username is itself an address, the email local part is used instead so the address does not become the display name. A username that no longer satisfies the display-name rules also falls back to the local part.
 - Any other account is **deleted**, together with the lists it owns (and those lists' items and memberships), its memberships of other people's lists, its sessions, and its identity rows. The migration logs a warning naming the removed accounts.
 - If two accounts resolve to the same email, the oldest `created_at` wins and the others are removed as above.
 

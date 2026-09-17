@@ -120,6 +120,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `NODE_ENV` | No | `production` (Compose) | Node environment |
 | `COOKIE_SECURE` | No | Compose: `false` (local HTTP). App: `true` when `NODE_ENV=production` if unset | `true` behind HTTPS. `false` only for local HTTP |
 | `ALLOW_REGISTRATION` | No | App: bootstrap. Compose default: `true` | `true`, `false`, or `bootstrap`. See above |
+| `DIRECTORY_SHOW_EMAILS` | No | `true` | Whether `GET /api/users` returns each account's email address. Display names are not unique, so with this off two people sharing a name are indistinguishable in the share picker. Either way every account stays in the directory, because sharing needs it |
 | `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
 | `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
 | `GENESIS_LISTS_VERSION` | No | `0.2.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
@@ -132,7 +133,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `OIDC_BUTTON_TEXT` | No | `Sign in with OIDC` | Login button label |
 | `OIDC_AUTO_REGISTER` | No | `true` | Create a local user on first OIDC login when no email match exists |
 | `OIDC_AUTO_LAUNCH` | No | `false` | Skip the login form and start OIDC immediately |
-| `OIDC_EMAIL_CLAIM` | No | `email` | Claim matched against the local account email (merge / create). Must be a valid address |
+| `OIDC_EMAIL_CLAIM` | No | `email` | Claim matched against the local account email (merge / create). Must be a valid address. The `email_verified` flag is always read under that standard name, so pointing this at another claim means the flag may describe a different address |
 | `OIDC_NAME_CLAIM` | No | `name` | Claim used as the display name when auto-registering; falls back to the email local part |
 | `OIDC_DISABLE_PASSWORD_LOGIN` | No | `false` | When `true` and OIDC is enabled, reject local password login/register |
 | `OIDC_REDIRECT_URI` | No | derived | Full callback URL override; default `{PUBLIC_BASE_URL}/api/auth/oidc/callback` |
@@ -153,11 +154,12 @@ On startup the app applies numbered schema steps and records them in `schema_mig
 
 Accounts are now identified by email address instead of username ([ADR 0006](adr/0006-email-login-identifier.md)). When the server first starts on this version it rewrites the `users` table:
 
-- An account is kept if an email address can be recovered for it: its username when that is already a valid address (only possible in a hand-edited database, given the old username rules), otherwise an address a previous OIDC login stored on it. The display name becomes the part before the `@`, and the password, lists, shares, and sessions are untouched.
+- An account is kept if an email address can be recovered for it: its username when that is already a valid address (only possible in a hand-edited database, given the old username rules), otherwise an address a previous OIDC login stored on it. The password, lists, shares, and sessions are untouched.
+- A kept account keeps its username as the display name, so people still recognise it in the share picker. Only when the username is itself an address does the display name become the part before the `@`, so that the address does not end up as the label.
 - **Every other account is deleted**, along with the lists it owns, the items on those lists, its memberships of other people's lists, and its sessions. Those people must register again with an email address, and their lists must be recreated.
 - If two accounts resolve to the same address, the older one is kept and the newer ones are deleted.
 
-If losing that data is not acceptable, export what you need before upgrading, or add the addresses yourself first. Setting each user's `email` column to the address they should own is enough for the migration to keep them:
+If losing that data is not acceptable, export what you need before upgrading, or add the addresses yourself first. Setting each user's `email` column to the address they should own is enough for the migration to keep them. The address must be a public-form address with a dotted domain (`alice@example.com`); `admin@localhost` and `admin@intranet` are not valid emails under the same rules as registration, so writing one of those in still deletes the account, with only a log line to explain it:
 
 ```bash
 sqlite3 app.db "UPDATE users SET email = 'alice@example.com' WHERE username = 'alice';"
@@ -260,4 +262,4 @@ Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in 
 | `/api/health` is `503` | Process is up but SQLite failed. Check the volume mount and file permissions. |
 | Cannot pull `ghcr.io/xeiverse/genesis-lists` | The tag has not been published yet. Use `docker compose up -d --build` from a checkout of that version. |
 | OIDC container exits on start | Missing `OIDC_*` / `PUBLIC_BASE_URL`, or discovery unreachable from the container. See [Authentik guide](guides/oauth-authentik.md). |
-| OIDC returns to `/login?error=oidc` | Check redirect URI, that the IdP releases a valid `email` claim (and does not send `email_verified: false`), and auto-register; inspect app logs. |
+| OIDC returns to `/login?error=oidc` | Check redirect URI, that the IdP releases a valid `email` claim (and does not send a non-affirmative `email_verified`), and auto-register; inspect app logs. |

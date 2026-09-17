@@ -16,7 +16,7 @@ Verify against [01-requirements.md](../01-requirements.md) (`REQ-OIDC-*`) and `d
 - [x] **REQ-OIDC-04** Unknown email with `OIDC_AUTO_REGISTER=true` creates a user with null password, the claimed email, and a display name from the name claim — *API test*
 - [x] **REQ-OIDC-04** Unknown email with `OIDC_AUTO_REGISTER=false` fails auth without creating a user — *API test*
 - [x] **REQ-OIDC-04** Missing or malformed email claim fails auth — *unit test via `extractOidcClaims`*
-- [x] **REQ-OIDC-04** `email_verified: false` fails auth; an absent `email_verified` is accepted — *unit test via `extractOidcClaims`*
+- [x] **REQ-OIDC-04** `email_verified` that is present and not affirmative (`false`, `"false"`, `0`) fails auth; an absent or affirmative (`true`, `"true"`, `1`) claim is accepted — *unit test via `extractOidcClaims`*
 - [ ] **REQ-OIDC-07** Auto-launch redirects from `/login` unless `?autoLaunch=0`; `?autoLaunch=1` forces it — *UI*
 - [x] **REQ-OIDC-08** Email claim stored and returned from `/api/auth/me` — *API test*
 

@@ -43,7 +43,7 @@ class ListsRepositoryTest {
         ),
         itemCount = 1,
         isOwner = true,
-        ownerUsername = "alice",
+        ownerName = "alice",
     )
 
     private fun sampleItem(id: String, listId: String, text: String) =
@@ -64,7 +64,7 @@ class ListsRepositoryTest {
         updatedAt = updatedAt,
         itemCount = itemCount,
         isOwner = isOwner,
-        ownerUsername = ownerUsername,
+        ownerName = ownerName,
         previewJson = json.encodeToString(previewItems),
     )
 

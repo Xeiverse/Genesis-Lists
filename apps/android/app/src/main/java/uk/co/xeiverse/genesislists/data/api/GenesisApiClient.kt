@@ -25,11 +25,14 @@ class GenesisApiClient(
 
     suspend fun me(): UserDto = get("/api/auth/me")
 
-    suspend fun login(username: String, password: String): UserDto =
-        post("/api/auth/login", encode(CredentialsBody(username, password)))
+    suspend fun login(email: String, password: String): UserDto =
+        post("/api/auth/login", encode(CredentialsBody(email, password)))
 
-    suspend fun register(username: String, password: String): UserDto =
-        post("/api/auth/register", encode(CredentialsBody(username, password)))
+    suspend fun register(email: String, password: String, name: String? = null): UserDto =
+        post("/api/auth/register", encode(RegisterBody(email, password, name)))
+
+    suspend fun mobileOidcExchange(ticket: String): UserDto =
+        post("/api/auth/oidc/mobile-exchange", encode(MobileExchangeBody(ticket)))
 
     suspend fun logout() {
         postEmpty("/api/auth/logout")

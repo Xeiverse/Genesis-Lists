@@ -131,7 +131,7 @@ Sessions live in a `sessions` table (id, user_id, expires_at, created_at) with t
 
 Short-lived OIDC login state (PKCE verifier, nonce, expiry) is stored server-side in `oidc_login_states` and is not part of the public API model.
 
-Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`. Schema version **4** replaces `username` with a unique `email` and adds `name` ([ADR 0006](adr/0006-email-login-identifier.md)).
+Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`. Schema version **4** replaces `username` with a unique `email` and adds `name` ([ADR 0006](adr/0006-email-login-identifier.md)). Schema version **5** adds `oidc_login_states.client` and `oidc_mobile_tickets` for Android OIDC ticket exchange ([ADR 0007](adr/0007-android-companion.md)).
 
 ### Schema version 4 is destructive
 

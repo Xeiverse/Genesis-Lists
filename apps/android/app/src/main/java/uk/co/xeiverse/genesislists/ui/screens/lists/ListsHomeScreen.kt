@@ -370,9 +370,9 @@ private fun ListCard(
                     }
                 }
             }
-            if (!list.isOwner && list.ownerUsername.isNotBlank()) {
+            if (!list.isOwner && list.ownerName.isNotBlank()) {
                 Text(
-                    "Shared by ${list.ownerUsername}",
+                    "Shared by ${list.ownerName}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

@@ -1,5 +1,7 @@
 package uk.co.xeiverse.genesislists.ui.screens.auth
 
+import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,13 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -30,6 +33,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import uk.co.xeiverse.genesislists.data.ListsRepository
@@ -44,14 +48,32 @@ fun AuthScreen(
     onAuthenticated: () -> Unit,
     onChangeServer: () -> Unit,
     onSettings: () -> Unit,
+    oauthTicket: String? = null,
+    oauthError: String? = null,
+    onOauthHandled: () -> Unit = {},
 ) {
     var registerMode by remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var config by remember { mutableStateOf<AuthConfigDto?>(null) }
+    var autoLaunchAttempted by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    fun openOidc() {
+        val url = repository.oidcStartUrl()
+        if (url == null) {
+            error = "Server URL is not configured"
+            return
+        }
+        try {
+            CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+        } catch (e: Exception) {
+            error = e.message ?: "Could not open browser"
+        }
+    }
 
     LaunchedEffect(Unit) {
         try {
@@ -63,14 +85,57 @@ fun AuthScreen(
             try {
                 repository.me()
                 onAuthenticated()
+                return@LaunchedEffect
             } catch (_: Exception) {
                 // stale session
             }
         }
     }
 
+    LaunchedEffect(oauthTicket, oauthError) {
+        when {
+            oauthError != null -> {
+                error = "OIDC sign-in failed"
+                onOauthHandled()
+            }
+            oauthTicket != null -> {
+                busy = true
+                error = null
+                try {
+                    repository.exchangeOidcTicket(oauthTicket)
+                    onOauthHandled()
+                    onAuthenticated()
+                } catch (e: ApiException) {
+                    error = e.message
+                    onOauthHandled()
+                } catch (e: Exception) {
+                    error = e.message ?: "OIDC exchange failed"
+                    onOauthHandled()
+                } finally {
+                    busy = false
+                }
+            }
+        }
+    }
+
     val registrationOpen = config?.registrationOpen == true
     val passwordLogin = config?.passwordLoginEnabled != false
+    val oidcEnabled = config?.oidc?.enabled == true
+    val oidcButtonText = config?.oidc?.buttonText?.takeIf { it.isNotBlank() } ?: "Sign in with OIDC"
+
+    LaunchedEffect(config, oauthTicket, oauthError) {
+        if (
+            !autoLaunchAttempted &&
+            config?.oidc?.autoLaunch == true &&
+            oidcEnabled &&
+            oauthTicket == null &&
+            oauthError == null &&
+            !repository.hasSession()
+        ) {
+            autoLaunchAttempted = true
+            openOidc()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -91,16 +156,11 @@ fun AuthScreen(
         )
         Spacer(Modifier.height(24.dp))
 
-        if (!passwordLogin) {
-            Text(
-                "Password login is disabled on this server. Use the web app for OIDC sign-in.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
+        if (passwordLogin) {
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it; error = null },
-                label = { Text("Username") },
+                value = email,
+                onValueChange = { email = it; error = null },
+                label = { Text("Email") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !busy,
@@ -123,9 +183,9 @@ fun AuthScreen(
                         error = null
                         try {
                             if (registerMode) {
-                                repository.register(username.trim(), password)
+                                repository.register(email.trim(), password)
                             } else {
-                                repository.login(username.trim(), password)
+                                repository.login(email.trim(), password)
                             }
                             onAuthenticated()
                         } catch (e: ApiException) {
@@ -137,7 +197,7 @@ fun AuthScreen(
                         }
                     }
                 },
-                enabled = !busy && username.isNotBlank() && password.length >= 8,
+                enabled = !busy && email.contains("@") && password.length >= 8,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (busy) CircularProgressIndicator(
@@ -146,18 +206,54 @@ fun AuthScreen(
                     color = MaterialTheme.colorScheme.onPrimary,
                 ) else Text(if (registerMode) "Register" else "Sign in")
             }
+            if (registrationOpen) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { registerMode = !registerMode; error = null }) {
+                    Text(
+                        if (registerMode) "Already have an account? Sign in"
+                        else "Need an account? Register",
+                    )
+                }
+            }
+        } else if (!oidcEnabled) {
+            Text(
+                "Password login and OIDC are both disabled on this server.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (oidcEnabled) {
+            if (passwordLogin) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+            } else {
+                Spacer(Modifier.height(8.dp))
+            }
+            if (passwordLogin) {
+                OutlinedButton(
+                    onClick = { error = null; openOidc() },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(oidcButtonText) }
+            } else {
+                Button(
+                    onClick = { error = null; openOidc() },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (busy) CircularProgressIndicator(
+                        modifier = Modifier.height(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    ) else Text(oidcButtonText)
+                }
+            }
         }
 
         error?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, color = MaterialTheme.colorScheme.error)
-        }
-
-        if (passwordLogin && registrationOpen) {
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { registerMode = !registerMode; error = null }) {
-                Text(if (registerMode) "Already have an account? Sign in" else "Need an account? Register")
-            }
         }
 
         Spacer(Modifier.height(16.dp))

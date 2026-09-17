@@ -63,7 +63,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), {
       status: "ok",
       version: "1.0.0",
-      schemaVersion: 4,
+      schemaVersion: 5,
     });
   });
 
@@ -1092,6 +1092,129 @@ describe("OIDC auth", async () => {
         });
         assert.equal(callback.statusCode, 302);
         assert.equal(callback.headers.location, "/login?error=oidc");
+      },
+    );
+  });
+
+  await it("Android OIDC callback issues a one-time ticket deep link", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-android-1",
+          email: "android@example.com",
+          name: "Android User",
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start?client=android",
+        });
+        assert.equal(start.statusCode, 302);
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
+
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+          headers: { cookie: oidcCookie },
+        });
+        assert.equal(callback.statusCode, 302);
+        const location = callback.headers.location as string;
+        assert.ok(
+          location.startsWith("uk.co.xeiverse.genesislists://oauth-callback?"),
+        );
+        const ticket = new URL(location).searchParams.get("ticket");
+        assert.ok(ticket);
+        assert.equal(pickCookie(callback, "genesis_session"), undefined);
+
+        const exchange = await app.inject({
+          method: "POST",
+          url: "/api/auth/oidc/mobile-exchange",
+          payload: { ticket },
+        });
+        assert.equal(exchange.statusCode, 200);
+        assert.equal(exchange.json().email, "android@example.com");
+        const sessionCookie = pickCookie(exchange, "genesis_session")!;
+        assert.ok(sessionCookie.includes("genesis_session="));
+
+        const me = await app.inject({
+          method: "GET",
+          url: "/api/auth/me",
+          headers: { cookie: sessionCookie },
+        });
+        assert.equal(me.statusCode, 200);
+        assert.equal(me.json().email, "android@example.com");
+
+        const reuse = await app.inject({
+          method: "POST",
+          url: "/api/auth/oidc/mobile-exchange",
+          payload: { ticket },
+        });
+        assert.equal(reuse.statusCode, 401);
+        assert.equal(reuse.json().error.code, "UNAUTHORIZED");
+      },
+    );
+  });
+
+  await it("Android OIDC failure redirects to the app deep link", async () => {
+    await withOidcApp(
+      {
+        exchange: () => {
+          throw new Error("should not run");
+        },
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start?client=android",
+        });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(
+          callback.headers.location,
+          "uk.co.xeiverse.genesislists://oauth-callback?error=oidc",
+        );
+      },
+    );
+  });
+
+  await it("non-android OIDC callback still redirects to /", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-web-1",
+          email: "web@example.com",
+          name: "Web User",
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start",
+        });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+          headers: { cookie: oidcCookie },
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(callback.headers.location, "/");
+        assert.ok(pickCookie(callback, "genesis_session"));
       },
     );
   });

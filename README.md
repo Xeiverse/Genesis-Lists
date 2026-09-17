@@ -84,7 +84,7 @@ cd apps/android
 ./gradlew :app:assembleDebug
 ```
 
-Configure the self-hosted server base URL in the app. Prefer HTTPS; cleartext HTTP is only for private LAN (see [apps/android/README.md](apps/android/README.md) and [ADR 0006](docs/adr/0006-android-companion.md)).
+Configure the self-hosted server base URL in the app. Prefer HTTPS; cleartext HTTP is only for private LAN (see [apps/android/README.md](apps/android/README.md) and [ADR 0007](docs/adr/0007-android-companion.md)).
 
 ## Monorepo layout
 

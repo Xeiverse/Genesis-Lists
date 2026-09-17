@@ -239,6 +239,13 @@ export function createMockOidcProvider(
 
 export const OIDC_STATE_TTL_MS = 10 * 60 * 1000;
 
+/** One-time ticket lifetime for Android Custom Tabs → app handoff. */
+export const OIDC_MOBILE_TICKET_TTL_MS = 2 * 60 * 1000;
+
+/** Deep link the Android app registers for OIDC completion. */
+export const ANDROID_OAUTH_CALLBACK_URI = "uk.co.xeiverse.genesislists://oauth-callback";
+
+
 export function newOidcStateMaterials() {
   const state = openid.randomState();
   const codeVerifier = openid.randomPKCECodeVerifier();

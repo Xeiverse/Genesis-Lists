@@ -143,8 +143,20 @@ paths:
       operationId: startOidc
       summary: Begin OIDC Authorization Code login
       description: >
-        Redirects the browser to the IdP authorize URL. Returns 404 when OIDC is disabled.
+        Redirects the browser (or Android Custom Tab) to the IdP authorize URL.
+        Returns 404 when OIDC is disabled. Pass `client=android` so a successful
+        callback issues a one-time mobile ticket deep link instead of setting the
+        session cookie for the browser. The IdP redirect URI remains the web
+        callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`).
       tags: [Auth]
+      parameters:
+        - name: client
+          in: query
+          required: false
+          description: Use `android` for the native companion Custom Tabs flow
+          schema:
+            type: string
+            enum: [android]
       responses:
         '302':
           description: Redirect to the identity provider
@@ -167,8 +179,11 @@ paths:
       operationId: oidcCallback
       summary: Complete OIDC login
       description: >
-        Exchanges the authorization code, links or creates the local user, sets the
-        session cookie, and redirects to `/`. On failure redirects to `/login?error=oidc`.
+        Exchanges the authorization code, links or creates the local user, and
+        either sets the session cookie and redirects to `/` (web) or redirects to
+        `uk.co.xeiverse.genesislists://oauth-callback?ticket=...` (Android client).
+        On failure redirects to `/login?error=oidc` or the Android scheme with
+        `?error=oidc`.
       tags: [Auth]
       parameters:
         - name: code
@@ -188,16 +203,58 @@ paths:
             type: string
       responses:
         '302':
-          description: Redirect to app home or login error
+          description: Redirect to app home, Android deep link, or login error
           headers:
             Location:
               schema:
                 type: string
-              description: `/` on success or `/login?error=oidc` on failure
+              description: >
+                `/` on web success; `uk.co.xeiverse.genesislists://oauth-callback?ticket=...`
+                on Android success; `/login?error=oidc` or Android `?error=oidc` on failure
             Set-Cookie:
               schema:
                 type: string
-              description: Session cookie on success
+              description: Session cookie on web success only
+
+  /api/auth/oidc/mobile-exchange:
+    post:
+      operationId: oidcMobileExchange
+      summary: Exchange an Android OIDC ticket for a session cookie
+      description: >
+        Consumes a one-time ticket issued by the Android OIDC callback, sets the
+        `genesis_session` cookie, and returns the current user. Tickets are single-use
+        and short-lived. Returns 404 when OIDC is disabled.
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ticket]
+              properties:
+                ticket:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+      responses:
+        '200':
+          description: Session created
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Signed genesis_session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
   /api/auth/logout:
     post:

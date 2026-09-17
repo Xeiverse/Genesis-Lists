@@ -28,7 +28,7 @@ data class RegistrationStatusDto(
 @Serializable
 data class OidcPublicConfigDto(
     val enabled: Boolean = false,
-    val buttonText: String = "Sign in with SSO",
+    val buttonText: String = "Sign in with OIDC",
     val autoLaunch: Boolean = false,
 )
 
@@ -42,8 +42,8 @@ data class AuthConfigDto(
 @Serializable
 data class UserDto(
     val id: String,
-    val username: String,
-    val email: String? = null,
+    val email: String,
+    val name: String,
     val authProviders: List<String> = emptyList(),
 )
 
@@ -63,7 +63,7 @@ data class ListDto(
     val previewItems: List<ListItemPreviewDto> = emptyList(),
     val itemCount: Int = 0,
     val isOwner: Boolean = true,
-    val ownerUsername: String = "",
+    val ownerName: String = "",
 )
 
 @Serializable
@@ -89,8 +89,15 @@ data class ItemsResponse(
 
 @Serializable
 data class CredentialsBody(
-    val username: String,
+    val email: String,
     val password: String,
+)
+
+@Serializable
+data class RegisterBody(
+    val email: String,
+    val password: String,
+    val name: String? = null,
 )
 
 @Serializable
@@ -116,8 +123,63 @@ data class ChangePasswordBody(
     val newPassword: String,
 )
 
+@Serializable
+data class MobileExchangeBody(
+    val ticket: String,
+)
+
 class ApiException(
     val status: Int,
     val code: String,
     override val message: String,
 ) : Exception(message)
+
+object OAuthDeepLink {
+    const val SCHEME = "uk.co.xeiverse.genesislists"
+    const val HOST = "oauth-callback"
+
+    fun oidcStartUrl(baseUrl: String): String =
+        "${baseUrl.trimEnd('/')}/api/auth/oidc/start?client=android"
+
+    fun parse(uriString: String): Result {
+        // Avoid android.net.Uri so JVM unit tests can run without Robolectric.
+        val trimmed = uriString.trim()
+        val schemeSep = trimmed.indexOf("://")
+        if (schemeSep <= 0) return Result.Ignored
+        val scheme = trimmed.substring(0, schemeSep)
+        if (scheme != SCHEME) return Result.Ignored
+        val rest = trimmed.substring(schemeSep + 3)
+        val queryStart = rest.indexOf('?')
+        val authorityAndPath = if (queryStart >= 0) rest.substring(0, queryStart) else rest
+        val host = authorityAndPath.substringBefore('/').substringBefore(':')
+        if (host != HOST) return Result.Ignored
+        val query = if (queryStart >= 0) rest.substring(queryStart + 1) else ""
+        val params = query.split('&')
+            .filter { it.isNotEmpty() }
+            .mapNotNull { part ->
+                val eq = part.indexOf('=')
+                if (eq < 0) part to ""
+                else {
+                    val key = java.net.URLDecoder.decode(part.substring(0, eq), Charsets.UTF_8)
+                    val value = java.net.URLDecoder.decode(part.substring(eq + 1), Charsets.UTF_8)
+                    key to value
+                }
+            }
+            .toMap()
+        val error = params["error"]
+        if (!error.isNullOrBlank()) {
+            return Result.Error(error)
+        }
+        val ticket = params["ticket"]
+        if (!ticket.isNullOrBlank()) {
+            return Result.Ticket(ticket)
+        }
+        return Result.Error("oidc")
+    }
+
+    sealed class Result {
+        data object Ignored : Result()
+        data class Ticket(val ticket: String) : Result()
+        data class Error(val code: String) : Result()
+    }
+}

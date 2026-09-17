@@ -86,7 +86,7 @@ fun SettingsScreen(
         ) {
             Text("Account", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            Text(user?.username ?: "—", style = MaterialTheme.typography.bodyLarge)
+            Text(user?.name ?: "—", style = MaterialTheme.typography.bodyLarge)
             user?.email?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

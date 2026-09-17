@@ -39,6 +39,19 @@ Install on a device/emulator:
 
 Session auth uses the same `genesis_session` cookie as the web app, persisted in EncryptedSharedPreferences via OkHttp’s cookie jar. No Bearer/JWT API changes are required.
 
+## OIDC (Login with OAuth)
+
+When the server has OIDC enabled (`GET /api/auth/config` → `oidc.enabled`), Auth shows a button labeled with `oidc.buttonText` (below the password form when both are on; OAuth-only when password login is disabled).
+
+Flow:
+
+1. App opens `{baseUrl}/api/auth/oidc/start?client=android` in a Chrome Custom Tab.
+2. IdP redirects to the **web** callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`) — no extra IdP redirect URI for mobile.
+3. Server redirects to `uk.co.xeiverse.genesislists://oauth-callback?ticket=...`.
+4. App exchanges the ticket via `POST /api/auth/oidc/mobile-exchange` and stores `genesis_session` in the cookie jar.
+
+Operators only need the usual OIDC env (`OIDC_*`, `PUBLIC_BASE_URL`); see [OIDC guide](../../docs/guides/oauth-authentik.md) and [ADR 0007](../../docs/adr/0007-android-companion.md).
+
 ## Settings & custom proxy headers
 
 - **Settings** is reachable from server setup and sign-in (ghost text button), as well as from the lists app bar. Back returns without clearing the server URL or session.
@@ -52,4 +65,4 @@ Session auth uses the same `genesis_session` cookie as the web app, persisted in
 
 ## Out of scope (this phase)
 
-Offline writes, sharing UI, OIDC in-app, push, widgets, Play Store publishing.
+Offline writes, sharing UI, push, widgets, Play Store publishing.

@@ -10,6 +10,7 @@ import uk.co.xeiverse.genesislists.data.api.HealthDto
 import uk.co.xeiverse.genesislists.data.api.ListDto
 import uk.co.xeiverse.genesislists.data.api.ListItemDto
 import uk.co.xeiverse.genesislists.data.api.ListItemPreviewDto
+import uk.co.xeiverse.genesislists.data.api.OAuthDeepLink
 import uk.co.xeiverse.genesislists.data.api.UpdateItemBody
 import uk.co.xeiverse.genesislists.data.api.UserDto
 import uk.co.xeiverse.genesislists.data.db.CacheDao
@@ -84,18 +85,30 @@ class ListsRepository(
 
     suspend fun me(): UserDto = api.me()
 
-    suspend fun login(username: String, password: String): UserDto {
+    suspend fun login(email: String, password: String): UserDto {
         requireOnline()
-        val user = api.login(username, password)
+        val user = api.login(email, password)
         refreshLists()
         return user
     }
 
-    suspend fun register(username: String, password: String): UserDto {
+    suspend fun register(email: String, password: String, name: String? = null): UserDto {
         requireOnline()
-        val user = api.register(username, password)
+        val user = api.register(email, password, name)
         refreshLists()
         return user
+    }
+
+    suspend fun exchangeOidcTicket(ticket: String): UserDto {
+        requireOnline()
+        val user = api.mobileOidcExchange(ticket)
+        refreshLists()
+        return user
+    }
+
+    fun oidcStartUrl(): String? {
+        val base = settings.baseUrl ?: return null
+        return OAuthDeepLink.oidcStartUrl(base)
     }
 
     suspend fun logout() {
@@ -234,7 +247,7 @@ private fun ListDto.toEntity(json: Json) = ListEntity(
     updatedAt = updatedAt,
     itemCount = itemCount,
     isOwner = isOwner,
-    ownerUsername = ownerUsername,
+    ownerName = ownerName,
     previewJson = json.encodeToString(previewItems),
 )
 
@@ -248,7 +261,7 @@ private fun ListEntity.toDto(json: Json) = ListDto(
     }.getOrDefault(emptyList()),
     itemCount = itemCount,
     isOwner = isOwner,
-    ownerUsername = ownerUsername,
+    ownerName = ownerName,
 )
 
 private fun ListItemDto.toEntity() = ItemEntity(

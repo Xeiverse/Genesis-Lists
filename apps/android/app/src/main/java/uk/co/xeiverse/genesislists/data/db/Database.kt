@@ -19,7 +19,7 @@ data class ListEntity(
     val updatedAt: String,
     val itemCount: Int,
     val isOwner: Boolean,
-    val ownerUsername: String,
+    val ownerName: String,
     val previewJson: String,
 )
 

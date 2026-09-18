@@ -65,7 +65,7 @@ function disabledOidcSettings(): OidcSettings {
     clientId: "",
     clientSecret: "",
     scope: "openid profile email",
-    buttonText: "Sign in with OIDC",
+    buttonText: "Login with OAuth",
     autoRegister: true,
     autoLaunch: false,
     emailClaim: "email",
@@ -209,12 +209,43 @@ export async function registerAuth(
     db.prepare(`DELETE FROM oidc_mobile_tickets WHERE expires_at <= ?`).run(nowIso());
   }
 
-  function androidOauthRedirect(query: Record<string, string>) {
+  function androidHandoffPath(query: Record<string, string>) {
+    const params = new URLSearchParams(query);
+    return `/api/auth/oidc/android-handoff?${params.toString()}`;
+  }
+
+  function androidAppDeepLink(query: Record<string, string>) {
     const url = new URL(ANDROID_OAUTH_CALLBACK_URI);
     for (const [key, value] of Object.entries(query)) {
       url.searchParams.set(key, value);
     }
     return url.href;
+  }
+
+  function androidHandoffHtml(deepLink: string) {
+    const escapedHref = deepLink
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const escapedJs = deepLink
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Open Genesis Lists</title>
+  <meta http-equiv="refresh" content="0;url=${escapedHref}"/>
+  <script>location.replace('${escapedJs}');</script>
+</head>
+<body>
+  <p><a href="${escapedHref}">Open Genesis Lists</a></p>
+</body>
+</html>`;
   }
 
   function createSession(userId: string) {
@@ -292,6 +323,7 @@ export async function registerAuth(
       enabled: oidcSettings.enabled,
       buttonText: oidcSettings.buttonText,
       autoLaunch: oidcSettings.autoLaunch,
+      mobileLogin: true,
     },
   }));
 
@@ -420,7 +452,7 @@ export async function registerAuth(
     const failRedirect = () => {
       clearOidcStateCookie(reply);
       if (androidClient) {
-        return reply.redirect(androidOauthRedirect({ error: "oidc" }));
+        return reply.redirect(androidHandoffPath({ error: "oidc" }));
       }
       return reply.redirect("/login?error=oidc");
     };
@@ -487,7 +519,7 @@ export async function registerAuth(
           `INSERT INTO oidc_mobile_tickets (ticket, session_id, expires_at, created_at)
            VALUES (?, ?, ?, ?)`,
         ).run(ticket, sessionId, oidcMobileTicketExpiry(), nowIso());
-        return reply.redirect(androidOauthRedirect({ ticket }));
+        return reply.redirect(androidHandoffPath({ ticket }));
       }
 
       setSessionCookie(reply, sessionId);
@@ -496,6 +528,27 @@ export async function registerAuth(
       app.log.error?.(err);
       return failRedirect();
     }
+  });
+
+  app.get("/api/auth/oidc/android-handoff", async (request, reply) => {
+    const query = request.query as Record<string, string | undefined>;
+    const ticket = query.ticket?.trim();
+    const error = query.error?.trim();
+
+    const deepLinkQuery: Record<string, string> = {};
+    if (ticket) {
+      deepLinkQuery.ticket = ticket;
+    } else if (error) {
+      deepLinkQuery.error = error;
+    } else {
+      deepLinkQuery.error = "oidc";
+    }
+
+    const deepLink = androidAppDeepLink(deepLinkQuery);
+    return reply
+      .type("text/html; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .send(androidHandoffHtml(deepLink));
   });
 
   app.post("/api/auth/oidc/mobile-exchange", async (request, reply) => {

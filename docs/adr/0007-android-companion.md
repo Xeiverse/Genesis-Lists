@@ -15,7 +15,7 @@ Genesis Lists is self-hosted with cookie-session auth (`genesis_session`). The r
 - Persist `genesis_session` with OkHttp `CookieJar` + EncryptedSharedPreferences (no Bearer/JWT).
 - Cache list/item GETs in Room for **offline read only**; mutations require network; server remains source of truth.
 - Settings is available before login. **Advanced → Custom proxy headers** stores extra request headers in encrypted prefs and applies them via an OkHttp interceptor (additive to cookies; not cleared on logout).
-- **OIDC on Android:** `GET /api/auth/oidc/start?client=android` → IdP (web callback URI) → deep link `uk.co.xeiverse.genesislists://oauth-callback?ticket=...` → `POST /api/auth/oidc/mobile-exchange` sets the session cookie in the app jar.
+- **OIDC on Android:** `GET /api/auth/oidc/start?client=android` → IdP (web callback URI) → `302` to HTTPS `/api/auth/oidc/android-handoff?ticket=...` (HTML opens `uk.co.xeiverse.genesislists://oauth-callback?...`) → `POST /api/auth/oidc/mobile-exchange` sets the session cookie in the app jar. Auth config exposes `oidc.mobileLogin: true` so old servers without the handoff path can be detected.
 
 ## Consequences
 

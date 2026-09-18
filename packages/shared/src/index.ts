@@ -116,6 +116,8 @@ export type OidcPublicConfigDto = {
   enabled: boolean;
   buttonText: string;
   autoLaunch: boolean;
+  /** True when Android Custom Tabs OIDC handoff is supported. */
+  mobileLogin: boolean;
 };
 
 export type AuthConfigDto = {

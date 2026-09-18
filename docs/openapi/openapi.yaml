@@ -69,8 +69,9 @@ paths:
                 passwordLoginEnabled: true
                 oidc:
                   enabled: false
-                  buttonText: Sign in with OIDC
+                  buttonText: Login with OAuth
                   autoLaunch: false
+                  mobileLogin: true
 
   /api/auth/register:
     post:
@@ -145,8 +146,9 @@ paths:
       description: >
         Redirects the browser (or Android Custom Tab) to the IdP authorize URL.
         Returns 404 when OIDC is disabled. Pass `client=android` so a successful
-        callback issues a one-time mobile ticket deep link instead of setting the
-        session cookie for the browser. The IdP redirect URI remains the web
+        callback redirects to the HTTPS android-handoff bridge (which opens the
+        app deep link with a one-time ticket) instead of setting the session
+        cookie for the browser. The IdP redirect URI remains the web
         callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`).
       tags: [Auth]
       parameters:
@@ -181,8 +183,8 @@ paths:
       description: >
         Exchanges the authorization code, links or creates the local user, and
         either sets the session cookie and redirects to `/` (web) or redirects to
-        `uk.co.xeiverse.genesislists://oauth-callback?ticket=...` (Android client).
-        On failure redirects to `/login?error=oidc` or the Android scheme with
+        `/api/auth/oidc/android-handoff?ticket=...` (Android client; no session
+        cookie). On failure redirects to `/login?error=oidc` or the handoff with
         `?error=oidc`.
       tags: [Auth]
       parameters:
@@ -203,18 +205,48 @@ paths:
             type: string
       responses:
         '302':
-          description: Redirect to app home, Android deep link, or login error
+          description: Redirect to app home, Android handoff, or login error
           headers:
             Location:
               schema:
                 type: string
               description: >
-                `/` on web success; `uk.co.xeiverse.genesislists://oauth-callback?ticket=...`
-                on Android success; `/login?error=oidc` or Android `?error=oidc` on failure
+                `/` on web success; `/api/auth/oidc/android-handoff?ticket=...`
+                on Android success; `/login?error=oidc` or handoff `?error=oidc` on failure
             Set-Cookie:
               schema:
                 type: string
               description: Session cookie on web success only
+
+  /api/auth/oidc/android-handoff:
+    get:
+      operationId: oidcAndroidHandoff
+      summary: HTTPS bridge from Custom Tabs into the Android app
+      description: >
+        Returns a small HTML page that navigates to
+        `uk.co.xeiverse.genesislists://oauth-callback` with the same query
+        (`ticket` or `error`). Used after the OIDC callback for Android clients
+        so Custom Tabs can complete a same-origin HTTPS hop before the custom
+        scheme. Does not set a session cookie.
+      tags: [Auth]
+      parameters:
+        - name: ticket
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: HTML handoff page
+          content:
+            text/html:
+              schema:
+                type: string
 
   /api/auth/oidc/mobile-exchange:
     post:
@@ -736,14 +768,21 @@ components:
 
     OidcPublicConfig:
       type: object
-      required: [enabled, buttonText, autoLaunch]
+      required: [enabled, buttonText, autoLaunch, mobileLogin]
       properties:
         enabled:
           type: boolean
         buttonText:
           type: string
+          description: Login button label (default Login with OAuth)
+          example: Login with OAuth
         autoLaunch:
           type: boolean
+        mobileLogin:
+          type: boolean
+          description: >
+            True when this server supports Android Custom Tabs OIDC handoff
+            (`client=android`, android-handoff, mobile-exchange)
 
     ErrorBody:
       type: object

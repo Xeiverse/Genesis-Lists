@@ -28,8 +28,10 @@ data class RegistrationStatusDto(
 @Serializable
 data class OidcPublicConfigDto(
     val enabled: Boolean = false,
-    val buttonText: String = "Sign in with OIDC",
+    val buttonText: String = "Login with OAuth",
     val autoLaunch: Boolean = false,
+    /** Present and true when the server supports Android Custom Tabs ticket handoff. */
+    val mobileLogin: Boolean? = null,
 )
 
 @Serializable

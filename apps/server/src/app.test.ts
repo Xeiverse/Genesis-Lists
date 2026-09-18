@@ -75,8 +75,9 @@ describe("Genesis Lists API contract", async () => {
       passwordLoginEnabled: true,
       oidc: {
         enabled: false,
-        buttonText: "Sign in with OIDC",
+        buttonText: "Login with OAuth",
         autoLaunch: false,
+        mobileLogin: true,
       },
     });
   });
@@ -858,6 +859,7 @@ describe("OIDC auth", async () => {
             enabled: true,
             buttonText: "Sign in with Authentik",
             autoLaunch: true,
+            mobileLogin: true,
           },
         });
 
@@ -1096,7 +1098,7 @@ describe("OIDC auth", async () => {
     );
   });
 
-  await it("Android OIDC callback issues a one-time ticket deep link", async () => {
+  await it("Android OIDC callback redirects to HTTPS handoff with a ticket", async () => {
     await withOidcApp(
       {
         exchange: () => ({
@@ -1125,11 +1127,33 @@ describe("OIDC auth", async () => {
         assert.equal(callback.statusCode, 302);
         const location = callback.headers.location as string;
         assert.ok(
-          location.startsWith("uk.co.xeiverse.genesislists://oauth-callback?"),
+          location.startsWith("/api/auth/oidc/android-handoff?"),
+          `expected handoff redirect, got ${location}`,
         );
-        const ticket = new URL(location).searchParams.get("ticket");
+        const ticket = new URL(location, "http://localhost").searchParams.get(
+          "ticket",
+        );
         assert.ok(ticket);
         assert.equal(pickCookie(callback, "genesis_session"), undefined);
+
+        const handoff = await app.inject({
+          method: "GET",
+          url: location,
+        });
+        assert.equal(handoff.statusCode, 200);
+        assert.match(handoff.headers["content-type"] ?? "", /text\/html/);
+        assert.equal(pickCookie(handoff, "genesis_session"), undefined);
+        const html = handoff.body;
+        assert.ok(
+          html.includes(
+            `uk.co.xeiverse.genesislists://oauth-callback?ticket=${encodeURIComponent(ticket!)}`,
+          ) ||
+            html.includes(
+              `uk.co.xeiverse.genesislists://oauth-callback?ticket=${ticket}`,
+            ),
+        );
+        assert.ok(html.includes("Open Genesis Lists"));
+        assert.ok(html.includes("location.replace"));
 
         const exchange = await app.inject({
           method: "POST",
@@ -1160,7 +1184,7 @@ describe("OIDC auth", async () => {
     );
   });
 
-  await it("Android OIDC failure redirects to the app deep link", async () => {
+  await it("Android OIDC failure redirects to the handoff bridge", async () => {
     await withOidcApp(
       {
         exchange: () => {
@@ -1182,8 +1206,45 @@ describe("OIDC auth", async () => {
         assert.equal(callback.statusCode, 302);
         assert.equal(
           callback.headers.location,
-          "uk.co.xeiverse.genesislists://oauth-callback?error=oidc",
+          "/api/auth/oidc/android-handoff?error=oidc",
         );
+
+        const handoff = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/android-handoff?error=oidc",
+        });
+        assert.equal(handoff.statusCode, 200);
+        assert.ok(
+          handoff.body.includes(
+            "uk.co.xeiverse.genesislists://oauth-callback?error=oidc",
+          ),
+        );
+        assert.equal(pickCookie(handoff, "genesis_session"), undefined);
+      },
+    );
+  });
+
+  await it("android-handoff HTML contains the app scheme for a ticket", async () => {
+    await withOidcApp(
+      {
+        exchange: () => {
+          throw new Error("unused");
+        },
+      },
+      async (app) => {
+        const handoff = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/android-handoff?ticket=test-ticket-123",
+        });
+        assert.equal(handoff.statusCode, 200);
+        assert.match(handoff.headers["content-type"] ?? "", /text\/html/);
+        assert.ok(
+          handoff.body.includes(
+            "uk.co.xeiverse.genesislists://oauth-callback?ticket=test-ticket-123",
+          ),
+        );
+        assert.ok(handoff.body.includes('href="uk.co.xeiverse.genesislists://'));
+        assert.equal(pickCookie(handoff, "genesis_session"), undefined);
       },
     );
   });

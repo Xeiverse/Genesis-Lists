@@ -41,16 +41,18 @@ Session auth uses the same `genesis_session` cookie as the web app, persisted in
 
 ## OIDC (Login with OAuth)
 
-When the server has OIDC enabled (`GET /api/auth/config` → `oidc.enabled`), Auth shows a button labeled with `oidc.buttonText` (below the password form when both are on; OAuth-only when password login is disabled).
+When the server has OIDC enabled (`GET /api/auth/config` → `oidc.enabled`), Auth shows a button labeled with `oidc.buttonText` (default **Login with OAuth**; below the password form when both are on; OAuth-only when password login is disabled).
+
+The server and app **must both** include mobile OIDC support. Config must expose `oidc.mobileLogin: true`. If OIDC is enabled but `mobileLogin` is missing/false (older server), the app shows an upgrade message instead of opening Custom Tabs into a web-only login.
 
 Flow:
 
 1. App opens `{baseUrl}/api/auth/oidc/start?client=android` in a Chrome Custom Tab.
 2. IdP redirects to the **web** callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`) — no extra IdP redirect URI for mobile.
-3. Server redirects to `uk.co.xeiverse.genesislists://oauth-callback?ticket=...`.
-4. App exchanges the ticket via `POST /api/auth/oidc/mobile-exchange` and stores `genesis_session` in the cookie jar.
+3. Server redirects Custom Tabs to HTTPS `{baseUrl}/api/auth/oidc/android-handoff?ticket=...` (HTML auto-opens the app scheme; no session cookie in the browser).
+4. Deep link `uk.co.xeiverse.genesislists://oauth-callback?ticket=...` reaches the app; it exchanges via `POST /api/auth/oidc/mobile-exchange` and stores `genesis_session` in the cookie jar.
 
-Operators only need the usual OIDC env (`OIDC_*`, `PUBLIC_BASE_URL`); see [OIDC guide](../../docs/guides/oauth-authentik.md) and [ADR 0007](../../docs/adr/0007-android-companion.md).
+Operators only need the usual OIDC env (`OIDC_*`, `PUBLIC_BASE_URL`); see [OIDC guide](../../docs/guides/oauth-authentik.md) and [ADR 0007](../../docs/adr/0007-android-companion.md). If an existing deploy still sets `OIDC_BUTTON_TEXT=Sign in with Authentik` (or similar), update or unset it and recreate the container so the button shows **Login with OAuth**.
 
 ## Settings & custom proxy headers
 

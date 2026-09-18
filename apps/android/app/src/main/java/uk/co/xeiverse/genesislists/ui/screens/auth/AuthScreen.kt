@@ -121,13 +121,16 @@ fun AuthScreen(
     val registrationOpen = config?.registrationOpen == true
     val passwordLogin = config?.passwordLoginEnabled != false
     val oidcEnabled = config?.oidc?.enabled == true
-    val oidcButtonText = config?.oidc?.buttonText?.takeIf { it.isNotBlank() } ?: "Sign in with OIDC"
+    val mobileLoginSupported = config?.oidc?.mobileLogin == true
+    val oidcButtonText = config?.oidc?.buttonText?.takeIf { it.isNotBlank() } ?: "Login with OAuth"
+    val showOidcButton = oidcEnabled && mobileLoginSupported
+    val showOidcUpgrade = oidcEnabled && !mobileLoginSupported
 
     LaunchedEffect(config, oauthTicket, oauthError) {
         if (
             !autoLaunchAttempted &&
             config?.oidc?.autoLaunch == true &&
-            oidcEnabled &&
+            showOidcButton &&
             oauthTicket == null &&
             oauthError == null &&
             !repository.hasSession()
@@ -222,7 +225,7 @@ fun AuthScreen(
             )
         }
 
-        if (oidcEnabled) {
+        if (showOidcButton) {
             if (passwordLogin) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider()
@@ -249,6 +252,18 @@ fun AuthScreen(
                     ) else Text(oidcButtonText)
                 }
             }
+        } else if (showOidcUpgrade) {
+            if (passwordLogin) {
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(16.dp))
+            } else {
+                Spacer(Modifier.height(8.dp))
+            }
+            Text(
+                "This server does not support Android OAuth login yet. Upgrade Genesis Lists to a release that includes mobile OIDC (oidc.mobileLogin), then try again.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         error?.let {

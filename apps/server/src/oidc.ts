@@ -85,7 +85,7 @@ export function resolveOidcSettingsFromEnv(env: NodeJS.ProcessEnv): OidcSettings
     clientId,
     clientSecret,
     scope: env.OIDC_SCOPE?.trim() || "openid profile email",
-    buttonText: env.OIDC_BUTTON_TEXT?.trim() || "Sign in with OIDC",
+    buttonText: env.OIDC_BUTTON_TEXT?.trim() || "Login with OAuth",
     autoRegister: envFlag(env.OIDC_AUTO_REGISTER, true),
     autoLaunch: envFlag(env.OIDC_AUTO_LAUNCH, false),
     emailClaim: env.OIDC_EMAIL_CLAIM?.trim() || "email",

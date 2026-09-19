@@ -1,0 +1,105 @@
+name: Android Release
+
+# Builds the companion APK when a GitHub Release is published (e.g. v0.3.0)
+# and attaches genesis-lists-<version>.apk to that release. Manual dispatch can
+# backfill an existing tag.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and attach (e.g. v0.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.event.release.tag_name }}"
+          fi
+          case "$tag" in
+            v*) ;;
+            *) echo "Tag must look like v0.3.0 (got: $tag)" >&2; exit 1 ;;
+          esac
+          ver="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            apps/android/**/*.gradle*
+            apps/android/**/gradle-wrapper.properties
+
+      # v4 no longer installs the obsolete SDK `tools` package (removed by Google).
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+
+      - name: Optional release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret; release APK will be debug-signed for sideloading."
+            exit 0
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/genesis-lists-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/genesis-lists-release.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble release APK
+        working-directory: apps/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PversionName="${{ steps.tag.outputs.version }}" \
+            --stacktrace
+
+      - name: Name APK for the release
+        id: apk
+        run: |
+          src="apps/android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$src" ]; then
+            echo "Expected APK missing at $src" >&2
+            ls -la apps/android/app/build/outputs/apk/release/ || true
+            exit 1
+          fi
+          out="genesis-lists-${{ steps.tag.outputs.version }}.apk"
+          cp "$src" "$out"
+          echo "path=${out}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: genesis-lists-${{ steps.tag.outputs.version }}-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          files: ${{ steps.apk.outputs.path }}
+          fail_on_unmatched_files: true

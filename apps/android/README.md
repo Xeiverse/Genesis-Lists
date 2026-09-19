@@ -16,12 +16,16 @@ From this directory:
 
 ```bash
 ./gradlew :app:assembleDebug
+./gradlew :app:assembleRelease
 ./gradlew :app:testDebugUnitTest
 ```
 
 CI runs `:app:testDebugUnitTest` on every pull request (see `.github/workflows/ci.yml`).
+Tagged releases also run [Android Release](../../.github/workflows/android-release.yml) when the GitHub Release is published, which builds a release APK and attaches `genesis-lists-<version>.apk`. Without `ANDROID_KEYSTORE_*` secrets the release build is debug-signed so it stays sideloadable; set those secrets for a stable signing key.
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+
+Release APK: `app/build/outputs/apk/release/app-release.apk` (override version with `-PversionName=0.3.0`)
 
 Install on a device/emulator:
 

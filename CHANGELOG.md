@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- GitHub Actions builds the Android companion APK when a GitHub Release is published and attaches it to that release
+
 ## 0.3.0
 
 ### Native Android companion

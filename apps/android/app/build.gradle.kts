@@ -6,16 +6,47 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun semverVersionCode(name: String): Int {
+    val core = name.removePrefix("v").substringBefore("-")
+    val parts = core.split(".")
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    return major * 10_000 + minor * 100 + patch
+}
+
 android {
     namespace = "uk.co.xeiverse.genesislists"
     compileSdk = 35
+
+    val releaseVersionName =
+        (project.findProperty("versionName") as String?)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "0.3.0"
+    val releaseVersionCode =
+        (project.findProperty("versionCode") as String?)?.toIntOrNull()
+            ?: semverVersionCode(releaseVersionName)
+
+    val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
+    val hasReleaseKeystore = !keystorePath.isNullOrBlank()
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(keystorePath!!)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "uk.co.xeiverse.genesislists"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.3.0"
+        versionCode = releaseVersionCode
+        versionName = releaseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -26,6 +57,12 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Installable sideload APK without Play signing secrets; optional CI keystore overrides.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

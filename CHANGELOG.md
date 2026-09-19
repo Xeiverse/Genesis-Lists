@@ -2,14 +2,16 @@
 
 ## Unreleased
 
-### Android companion hardening
+## 0.3.0
 
-- Clear OAuth deep-link intent after parse; skip ticket exchange when a session already exists (avoids “expired ticket” after activity recreation).
-- Room list sync deletes orphan cached items when lists leave the server index.
-- Changing the server base URL clears the session cookie jar and Room cache (proxy headers kept) and returns to Auth.
-- App-layer cleartext allowlist for private/local hosts; Network Security Config stays permissive because CIDRs cannot be expressed in XML.
-- Auth config fetch failure shows Retry instead of defaulting to “OIDC unsupported.”
-- CI runs `./gradlew :app:testDebugUnitTest` on pull requests.
+### Native Android companion
+
+- Official Kotlin / Jetpack Compose client under `apps/android/` (`uk.co.xeiverse.genesislists`) for self-hosted servers
+- Cookie-session auth with EncryptedSharedPreferences; Room offline **read** cache; mutations require network
+- Pre-auth Settings and custom proxy headers (OkHttp interceptor) for reverse-proxy auth
+- OIDC via Custom Tabs: `client=android` → HTTPS android-handoff → one-time mobile ticket exchange (schema version 5)
+- Default OAuth button text **Login with OAuth**; `oidc.mobileLogin` gates older servers
+- Review hardening: clear stale OAuth intents, purge Room orphan items, clear session on server URL change, cleartext allowlist for private/local hosts, auth-config Retry, Android unit tests in CI
 
 ### Breaking: accounts are identified by email
 

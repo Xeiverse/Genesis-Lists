@@ -51,16 +51,17 @@ jobs:
             apps/android/**/gradle-wrapper.properties
 
       # v4 no longer installs the obsolete SDK `tools` package (removed by Google).
+      # build-tools provides apksigner so we can sign unsigned outputs from older tags.
       - uses: android-actions/setup-android@v4
         with:
-          packages: platform-tools
+          packages: "platform-tools build-tools;35.0.0"
 
       - name: Optional release keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
-            echo "No ANDROID_KEYSTORE_BASE64 secret; release APK will be debug-signed for sideloading."
+            echo "No ANDROID_KEYSTORE_BASE64 secret; APK will be debug-signed for sideloading."
             exit 0
           fi
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/genesis-lists-release.jks"
@@ -76,18 +77,88 @@ jobs:
           ./gradlew :app:assembleRelease \
             -PversionName="${{ steps.tag.outputs.version }}" \
             --stacktrace
+          echo "Release APK outputs:"
+          ls -la app/build/outputs/apk/release/ || true
 
-      - name: Name APK for the release
+      # Checkout is the release tag, so Gradle signing from later commits is not
+      # present (v0.3.0 emits app-release-unsigned.apk). Sign here so the
+      # attached asset is always installable.
+      - name: Sign and name APK for the release
         id: apk
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          src="apps/android/app/build/outputs/apk/release/app-release.apk"
-          if [ ! -f "$src" ]; then
-            echo "Expected APK missing at $src" >&2
-            ls -la apps/android/app/build/outputs/apk/release/ || true
+          set -euo pipefail
+          src_dir="apps/android/app/build/outputs/apk/release"
+          if [ -f "$src_dir/app-release.apk" ]; then
+            src="$src_dir/app-release.apk"
+          elif [ -f "$src_dir/app-release-unsigned.apk" ]; then
+            src="$src_dir/app-release-unsigned.apk"
+          else
+            echo "Expected release APK missing under $src_dir" >&2
+            ls -la "$src_dir" || true
             exit 1
           fi
+
+          find_apksigner() {
+            if command -v apksigner >/dev/null 2>&1; then
+              command -v apksigner
+              return
+            fi
+            local sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+            local latest
+            latest="$(ls -1d "$sdk"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+            if [ -n "${latest}" ]; then
+              echo "$latest"
+              return
+            fi
+            echo "apksigner not found under $sdk/build-tools" >&2
+            exit 1
+          }
+
+          APKSIGNER="$(find_apksigner)"
           out="genesis-lists-${{ steps.tag.outputs.version }}.apk"
-          cp "$src" "$out"
+
+          if "$APKSIGNER" verify --min-sdk-version 26 "$src" >/dev/null 2>&1; then
+            echo "Release APK is already signed: $src"
+            cp "$src" "$out"
+          else
+            echo "Signing unsigned APK: $src"
+            if [ -n "${ANDROID_KEYSTORE_PATH:-}" ]; then
+              ks="$ANDROID_KEYSTORE_PATH"
+              alias="${ANDROID_KEY_ALIAS:?ANDROID_KEY_ALIAS is required when ANDROID_KEYSTORE_PATH is set}"
+              storepass="${ANDROID_KEYSTORE_PASSWORD:?ANDROID_KEYSTORE_PASSWORD is required when ANDROID_KEYSTORE_PATH is set}"
+              keypass="${ANDROID_KEY_PASSWORD:-$storepass}"
+            else
+              ks="${RUNNER_TEMP:-/tmp}/genesis-lists-sideload.jks"
+              alias="androiddebugkey"
+              storepass="android"
+              keypass="android"
+              keytool -genkeypair \
+                -keystore "$ks" \
+                -storetype JKS \
+                -storepass "$storepass" \
+                -alias "$alias" \
+                -keypass "$keypass" \
+                -keyalg RSA \
+                -keysize 2048 \
+                -validity 10000 \
+                -dname "CN=Android Debug,O=Android,C=US"
+              echo "No ANDROID_KEYSTORE_PATH; debug-signing for sideloading."
+            fi
+            "$APKSIGNER" sign \
+              --ks "$ks" \
+              --ks-key-alias "$alias" \
+              --ks-pass "pass:${storepass}" \
+              --key-pass "pass:${keypass}" \
+              --min-sdk-version 26 \
+              --out "$out" \
+              "$src"
+          fi
+
+          "$APKSIGNER" verify --min-sdk-version 26 "$out"
           echo "path=${out}" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact

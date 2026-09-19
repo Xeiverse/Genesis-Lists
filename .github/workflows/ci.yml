@@ -30,19 +30,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Cache Gradle
-        uses: actions/cache@v4
+          cache: gradle
+          cache-dependency-path: |
+            apps/android/**/*.gradle*
+            apps/android/**/gradle-wrapper.properties
+      # v4 no longer installs the obsolete SDK `tools` package (removed by Google).
+      - uses: android-actions/setup-android@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/android/**/*.gradle*', 'apps/android/**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-      - name: Android unit tests
+          packages: platform-tools
+      - name: Android assemble + unit tests
         working-directory: apps/android
-        run: ./gradlew :app:testDebugUnitTest --stacktrace
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest --stacktrace
 
   docker:
     runs-on: ubuntu-latest

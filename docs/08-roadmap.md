@@ -36,7 +36,7 @@ Follow-ups:
 
 ## Native clients
 
-- **Android companion (in progress / shipped as debug client):** `apps/android/` — Kotlin, Jetpack Compose, cookie-session auth, Room offline **read** cache, Custom Tabs OIDC. See [ADR 0007](adr/0007-android-companion.md) and [`apps/android/README.md`](../apps/android/README.md).
+- **Android companion (in progress / shipped as debug client):** `apps/android/` — Kotlin, Jetpack Compose, cookie-session auth, Room offline **read** cache, Custom Tabs OIDC. CI runs Android unit tests. See [ADR 0007](adr/0007-android-companion.md) and [`apps/android/README.md`](../apps/android/README.md).
 - Reuse the same OpenAPI contract (hand-mirrored DTOs today; generated clients optional later).
 - Follow-ups: sharing UI, offline writes, Play Store pipeline.
 - Consider Flutter or React Native only if a second platform is needed after the Android companion stabilizes.

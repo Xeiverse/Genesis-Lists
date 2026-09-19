@@ -113,9 +113,13 @@ fun SettingsScreen(
                 onClick = {
                     scope.launch {
                         try {
-                            repository.checkHealth(serverUrl)
-                            snackbar.showSnackbar("Server saved")
-                            onServerChanged()
+                            val result = repository.changeServerUrl(serverUrl)
+                            if (result.sessionInvalidated) {
+                                snackbar.showSnackbar("Server saved · sign in again")
+                                onServerChanged()
+                            } else {
+                                snackbar.showSnackbar("Server saved")
+                            }
                         } catch (e: Exception) {
                             snackbar.showSnackbar(e.message ?: "Could not reach server")
                         }

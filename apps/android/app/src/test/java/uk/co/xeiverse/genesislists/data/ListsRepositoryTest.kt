@@ -89,6 +89,14 @@ class ListsRepositoryTest {
                 sampleList("orphan", "Gone").toEntity(),
             ),
         )
+        dao.replaceItemsForList(
+            "orphan",
+            listOf(sampleItem("orphan-item", "orphan", "stale text").toEntity()),
+        )
+        dao.replaceItemsForList(
+            "a",
+            listOf(sampleItem("a-item", "a", "keep me").toEntity()),
+        )
 
         repo.mergeListsCache(
             listOf(
@@ -101,6 +109,8 @@ class ListsRepositoryTest {
         assertEquals(setOf("a", "b"), ids)
         assertEquals("Keep renamed", dao.getList("a")?.name)
         assertFalse(ids.contains("orphan"))
+        assertEquals(emptyList<ItemEntity>(), dao.getItems("orphan"))
+        assertEquals(setOf("a-item"), dao.getItems("a").map { it.id }.toSet())
     }
 
     @Test
@@ -173,6 +183,114 @@ class ListsRepositoryTest {
     }
 
     @Test
+    fun changeServerUrl_clearsSessionAndCacheWhenHostChanges() = runTest {
+        val dao = InMemoryCacheDao()
+        val cookiePrefs = InMemorySharedPreferences()
+        val cookieJar = PersistentCookieJar(cookiePrefs)
+        val settings = ServerSettingsStore(InMemorySharedPreferences())
+        settings.baseUrl = "https://old.example.com"
+        settings.customProxyHeaders = mapOf("X-Proxy" to "keep")
+
+        dao.replaceAllLists(listOf(sampleList("cached", "Old host").toEntity()))
+        val url = "https://old.example.com/".toHttpUrl()
+        cookieJar.saveFromResponse(
+            url,
+            listOf(
+                Cookie.Builder()
+                    .name(PersistentCookieJar.SESSION_COOKIE)
+                    .value("session-old")
+                    .domain("old.example.com")
+                    .path("/")
+                    .expiresAt(System.currentTimeMillis() + 86_400_000)
+                    .build(),
+            ),
+        )
+        assertTrue(cookieJar.hasSessionCookie())
+
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse()
+                .setBody("""{"status":"ok","version":"test"}""")
+                .addHeader("Content-Type", "application/json"),
+        )
+        server.start()
+        try {
+            val base = "http://127.0.0.1:${server.port}"
+            val client = GenesisApiClient(
+                baseUrlProvider = { settings.baseUrl },
+                client = GenesisApiClient.buildOkHttp(cookieJar),
+            )
+            val repo = ListsRepository(
+                api = client,
+                dao = dao,
+                settings = settings,
+                cookieJar = cookieJar,
+                connectivity = ConnectivityMonitor { true },
+            )
+
+            val result = repo.changeServerUrl(base)
+            assertTrue(result.sessionInvalidated)
+            assertEquals("ok", result.health.status)
+            assertFalse(cookieJar.hasSessionCookie())
+            assertTrue(dao.getLists().isEmpty())
+            assertEquals(mapOf("X-Proxy" to "keep"), settings.customProxyHeaders)
+            assertEquals(base, settings.baseUrl)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun changeServerUrl_sameHostKeepsSessionAndCache() = runTest {
+        val dao = InMemoryCacheDao()
+        val cookieJar = PersistentCookieJar(InMemorySharedPreferences())
+        val settings = ServerSettingsStore(InMemorySharedPreferences())
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse()
+                .setBody("""{"status":"ok","version":"test"}""")
+                .addHeader("Content-Type", "application/json"),
+        )
+        server.start()
+        try {
+            val base = "http://127.0.0.1:${server.port}"
+            settings.baseUrl = base
+            dao.replaceAllLists(listOf(sampleList("cached", "Keep").toEntity()))
+            cookieJar.saveFromResponse(
+                "$base/".toHttpUrl(),
+                listOf(
+                    Cookie.Builder()
+                        .name(PersistentCookieJar.SESSION_COOKIE)
+                        .value("session-keep")
+                        .hostOnlyDomain("127.0.0.1")
+                        .path("/")
+                        .expiresAt(System.currentTimeMillis() + 86_400_000)
+                        .build(),
+                ),
+            )
+
+            val client = GenesisApiClient(
+                baseUrlProvider = { settings.baseUrl },
+                client = GenesisApiClient.buildOkHttp(cookieJar),
+            )
+            val repo = ListsRepository(
+                api = client,
+                dao = dao,
+                settings = settings,
+                cookieJar = cookieJar,
+                connectivity = ConnectivityMonitor { true },
+            )
+
+            val result = repo.changeServerUrl("$base/")
+            assertFalse(result.sessionInvalidated)
+            assertTrue(cookieJar.hasSessionCookie())
+            assertEquals(1, dao.getLists().size)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun cookieSerialization_roundTrip() {
         val url = "https://lists.example.com/api/auth/login".toHttpUrl()
         val cookie = Cookie.Builder()
@@ -236,7 +354,10 @@ class InMemoryCacheDao : CacheDao {
 
     override suspend fun deleteListsNotIn(ids: List<String>) {
         lists.value = lists.value.filter { it.id in ids }
-        items.value = items.value.filter { it.listId in ids }
+    }
+
+    override suspend fun deleteItemsNotInLists(listIds: List<String>) {
+        items.value = items.value.filter { it.listId in listIds }
     }
 
     override suspend fun clearLists() {
@@ -266,8 +387,10 @@ class InMemoryCacheDao : CacheDao {
             clearLists()
             clearItems()
         } else {
+            val ids = lists.map { it.id }
             upsertLists(lists)
-            deleteListsNotIn(lists.map { it.id })
+            deleteListsNotIn(ids)
+            deleteItemsNotInLists(ids)
         }
     }
 

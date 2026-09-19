@@ -82,9 +82,10 @@ Optional native client for phones/tablets. Not part of the pnpm workspace — us
 ```bash
 cd apps/android
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
 ```
 
-Configure the self-hosted server base URL in the app. Prefer HTTPS; cleartext HTTP is only for private LAN (see [apps/android/README.md](apps/android/README.md) and [ADR 0007](docs/adr/0007-android-companion.md)).
+CI runs the Android unit tests on every pull request. Configure the self-hosted server base URL in the app. Prefer HTTPS; cleartext HTTP is allowed only for private LAN / localhost / emulator hosts (see [apps/android/README.md](apps/android/README.md) and [ADR 0007](docs/adr/0007-android-companion.md)).
 
 ## Monorepo layout
 

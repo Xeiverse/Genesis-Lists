@@ -72,10 +72,12 @@ class MainActivity : ComponentActivity() {
             is OAuthDeepLink.Result.Ticket -> {
                 oauthTicket = result.ticket
                 oauthError = null
+                intent.data = null
             }
             is OAuthDeepLink.Result.Error -> {
                 oauthError = result.code
                 oauthTicket = null
+                intent.data = null
             }
             OAuthDeepLink.Result.Ignored -> Unit
         }
@@ -197,7 +199,9 @@ fun GenesisApp(
                     }
                 },
                 onServerChanged = {
-                    // stay on settings; session cookies may no longer match new host
+                    navController.navigate(Routes.Auth.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 },
                 onProxyHeaders = {
                     navController.navigate(Routes.ProxyHeaders.route)

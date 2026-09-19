@@ -1,6 +1,7 @@
 package uk.co.xeiverse.genesislists.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uk.co.xeiverse.genesislists.data.api.OAuthDeepLink
@@ -38,5 +39,13 @@ class OAuthDeepLinkTest {
             "https://lists.example.com/api/auth/oidc/start?client=android",
             OAuthDeepLink.oidcStartUrl("https://lists.example.com/"),
         )
+    }
+
+    @Test
+    fun shouldExchangeOidcTicket_skipsWhenSessionExists() {
+        assertFalse(OAuthDeepLink.shouldExchangeOidcTicket(hasSession = true, ticket = "abc"))
+        assertTrue(OAuthDeepLink.shouldExchangeOidcTicket(hasSession = false, ticket = "abc"))
+        assertFalse(OAuthDeepLink.shouldExchangeOidcTicket(hasSession = false, ticket = null))
+        assertFalse(OAuthDeepLink.shouldExchangeOidcTicket(hasSession = false, ticket = ""))
     }
 }

@@ -27,6 +27,11 @@ class OfflineMutationException(
     message: String = "You are offline. Changes require a network connection.",
 ) : Exception(message)
 
+data class ChangeServerResult(
+    val health: HealthDto,
+    val sessionInvalidated: Boolean,
+)
+
 /**
  * Repository: server is source of truth. Room is an offline READ cache only.
  * Mutations require network and then refresh the cache.
@@ -53,7 +58,7 @@ class ListsRepository(
     fun getBaseUrl(): String? = settings.baseUrl
 
     fun setBaseUrl(url: String) {
-        settings.baseUrl = normalizeBaseUrl(url)
+        settings.baseUrl = ServerUrlPolicy.normalizeAndValidate(url)
     }
 
     fun getCustomProxyHeaders(): Map<String, String> = settings.customProxyHeaders
@@ -68,7 +73,13 @@ class ListsRepository(
 
     suspend fun checkHealth(url: String? = null): HealthDto {
         val previous = settings.baseUrl
-        if (url != null) settings.baseUrl = normalizeBaseUrl(url)
+        if (url != null) {
+            settings.baseUrl = ServerUrlPolicy.normalizeAndValidate(url)
+        } else {
+            val current = settings.baseUrl
+                ?: throw ApiException(0, "NO_SERVER", "Server URL is not configured")
+            ServerUrlPolicy.requireCleartextAllowed(current)
+        }
         return try {
             api.health().also {
                 if (it.status != "ok") {
@@ -77,6 +88,32 @@ class ListsRepository(
             }
         } catch (e: Exception) {
             if (url != null) settings.baseUrl = previous
+            throw e
+        }
+    }
+
+    /**
+     * Verify [url], persist it, and clear session cookies + Room cache when the
+     * normalized base URL changes. Custom proxy headers are kept.
+     */
+    suspend fun changeServerUrl(url: String): ChangeServerResult {
+        val previous = settings.baseUrl
+        val normalized = ServerUrlPolicy.normalizeAndValidate(url)
+        val changed = previous != normalized
+        settings.baseUrl = normalized
+        return try {
+            val health = api.health().also {
+                if (it.status != "ok") {
+                    throw ApiException(503, "UNHEALTHY", "Server health status: ${it.status}")
+                }
+            }
+            if (changed) {
+                cookieJar.clear()
+                dao.clearAll()
+            }
+            ChangeServerResult(health = health, sessionInvalidated = changed)
+        } catch (e: Exception) {
+            settings.baseUrl = previous
             throw e
         }
     }

@@ -34,6 +34,7 @@ export type OidcLoginStateRow = {
   state: string;
   code_verifier: string;
   nonce: string | null;
+  client: string | null;
   expires_at: string;
   created_at: string;
 };

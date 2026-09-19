@@ -63,6 +63,9 @@ interface CacheDao {
     @Query("DELETE FROM lists WHERE id NOT IN (:ids)")
     suspend fun deleteListsNotIn(ids: List<String>)
 
+    @Query("DELETE FROM items WHERE listId NOT IN (:listIds)")
+    suspend fun deleteItemsNotInLists(listIds: List<String>)
+
     @Query("DELETE FROM lists")
     suspend fun clearLists()
 
@@ -87,8 +90,10 @@ interface CacheDao {
             clearLists()
             clearItems()
         } else {
+            val ids = lists.map { it.id }
             upsertLists(lists)
-            deleteListsNotIn(lists.map { it.id })
+            deleteListsNotIn(ids)
+            deleteItemsNotInLists(ids)
         }
     }
 

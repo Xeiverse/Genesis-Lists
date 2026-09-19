@@ -143,6 +143,10 @@ object OAuthDeepLink {
     fun oidcStartUrl(baseUrl: String): String =
         "${baseUrl.trimEnd('/')}/api/auth/oidc/start?client=android"
 
+    /** Skip re-exchange when a session already exists (stale deep-link after recreation). */
+    fun shouldExchangeOidcTicket(hasSession: Boolean, ticket: String?): Boolean =
+        !ticket.isNullOrBlank() && !hasSession
+
     fun parse(uriString: String): Result {
         // Avoid android.net.Uri so JVM unit tests can run without Robolectric.
         val trimmed = uriString.trim()

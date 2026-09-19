@@ -130,7 +130,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `OIDC_CLIENT_ID` | When OIDC enabled | — | Confidential client id |
 | `OIDC_CLIENT_SECRET` | When OIDC enabled | — | Client secret |
 | `OIDC_SCOPE` | No | `openid profile email` | Space-delimited scopes |
-| `OIDC_BUTTON_TEXT` | No | `Sign in with OIDC` | Login button label |
+| `OIDC_BUTTON_TEXT` | No | `Login with OAuth` | Login button label |
 | `OIDC_AUTO_REGISTER` | No | `true` | Create a local user on first OIDC login when no email match exists |
 | `OIDC_AUTO_LAUNCH` | No | `false` | Skip the login form and start OIDC immediately |
 | `OIDC_EMAIL_CLAIM` | No | `email` | Claim matched against the local account email (merge / create). Must be a valid address. The `email_verified` flag is always read under that standard name, so pointing this at another claim means the flag may describe a different address |

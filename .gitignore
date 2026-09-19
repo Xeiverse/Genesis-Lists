@@ -6,7 +6,8 @@ coverage/
 .env
 .env.*
 !.env.example
-data/
+# Server/runtime SQLite data at repo root only (not Android `.../data/` packages)
+/data/
 *.db
 *.db-journal
 .DS_Store
@@ -17,3 +18,8 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+apps/android/.gradle/
+apps/android/**/build/
+apps/android/local.properties
+*.apk
+*.aab

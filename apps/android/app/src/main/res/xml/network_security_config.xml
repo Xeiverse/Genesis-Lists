@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Prefer HTTPS. Cleartext is permitted in NSC because Android XML cannot express
+  RFC1918 CIDRs; the app enforces an allowlist in ServerUrlPolicy (private LAN,
+  localhost, emulator 10.0.2.2, .local). Do not expose Genesis Lists over
+  cleartext on the public internet.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

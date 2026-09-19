@@ -59,13 +59,15 @@ OIDC_ISSUER_URL=https://authentik.example.com/application/o/<application_slug>/
 OIDC_CLIENT_ID=<client-id-from-authentik>
 OIDC_CLIENT_SECRET=<client-secret-from-authentik>
 OIDC_SCOPE=openid profile email
-OIDC_BUTTON_TEXT=Sign in with Authentik
+OIDC_BUTTON_TEXT=Login with OAuth
 OIDC_AUTO_REGISTER=true
 OIDC_AUTO_LAUNCH=false
 OIDC_EMAIL_CLAIM=email
 OIDC_NAME_CLAIM=name
 OIDC_DISABLE_PASSWORD_LOGIN=false
 ```
+
+`OIDC_BUTTON_TEXT` is cosmetic and provider-neutral (default **Login with OAuth**). It is not Authentik-specific. Existing deploys that set an older value (for example `Sign in with Authentik`) should update or unset `OIDC_BUTTON_TEXT` and recreate the container.
 
 Recreate the container so env changes apply:
 

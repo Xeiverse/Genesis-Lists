@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Android companion hardening
+
+- Clear OAuth deep-link intent after parse; skip ticket exchange when a session already exists (avoids “expired ticket” after activity recreation).
+- Room list sync deletes orphan cached items when lists leave the server index.
+- Changing the server base URL clears the session cookie jar and Room cache (proxy headers kept) and returns to Auth.
+- App-layer cleartext allowlist for private/local hosts; Network Security Config stays permissive because CIDRs cannot be expressed in XML.
+- Auth config fetch failure shows Retry instead of defaulting to “OIDC unsupported.”
+- CI runs `./gradlew :app:testDebugUnitTest` on pull requests.
+
 ### Breaking: accounts are identified by email
 
 - Sign in with an email address and password instead of a username. Emails are unique, and are compared trimmed and lower-cased.

@@ -34,6 +34,7 @@ export type OidcLoginStateRow = {
   state: string;
   code_verifier: string;
   nonce: string | null;
+  client: string | null;
   expires_at: string;
   created_at: string;
 };
@@ -65,7 +66,7 @@ export type ItemRow = {
 
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -139,6 +140,12 @@ function migrate(db: Db) {
     applyMigration4(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (4, ?)`,
+    ).run(new Date().toISOString());
+  }
+  if (getSchemaVersion(db) < 5) {
+    applyMigration5(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (5, ?)`,
     ).run(new Date().toISOString());
   }
 }
@@ -371,6 +378,24 @@ function applyMigration4(db: Db) {
   }
 }
 
+/**
+ * Android OIDC mobile ticket exchange (ADR 0005 / 0007).
+ * Adds optional `client` on OIDC login state and a one-time ticket table.
+ */
+function applyMigration5(db: Db) {
+  db.exec(`
+    ALTER TABLE oidc_login_states ADD COLUMN client TEXT;
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS oidc_mobile_tickets (
+      ticket TEXT PRIMARY KEY NOT NULL,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+}
+
 function pruneExpiredSessions(db: Db) {
   db.prepare(`DELETE FROM sessions WHERE expires_at <= ?`).run(
     new Date().toISOString(),
@@ -384,5 +409,12 @@ function pruneExpiredOidcStates(db: Db) {
     );
   } catch {
     // Table may not exist on partial migrate failure paths
+  }
+  try {
+    db.prepare(`DELETE FROM oidc_mobile_tickets WHERE expires_at <= ?`).run(
+      new Date().toISOString(),
+    );
+  } catch {
+    // Table may not exist before migration 5
   }
 }

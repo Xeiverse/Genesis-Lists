@@ -27,7 +27,7 @@ Follow-ups:
 
 - IdP end-session / backchannel logout
 - Authelia / Keycloak example pages (same env knobs as Authentik)
-- Mobile custom-scheme redirect URIs when native clients exist
+- Android OIDC via one-time mobile ticket is implemented ([ADR 0007](adr/0007-android-companion.md)); further native polish as needed
 
 ## PWA
 
@@ -36,8 +36,10 @@ Follow-ups:
 
 ## Native clients
 
-- Reuse the same OpenAPI contract (generated clients).
-- Consider Flutter or React Native only after API stability.
+- **Android companion (in progress / shipped as debug client):** `apps/android/` — Kotlin, Jetpack Compose, cookie-session auth, Room offline **read** cache, Custom Tabs OIDC. CI runs Android unit tests. See [ADR 0007](adr/0007-android-companion.md) and [`apps/android/README.md`](../apps/android/README.md).
+- Reuse the same OpenAPI contract (hand-mirrored DTOs today; generated clients optional later).
+- Follow-ups: sharing UI, offline writes, Play Store pipeline.
+- Consider Flutter or React Native only if a second platform is needed after the Android companion stabilizes.
 
 ## Other ideas
 

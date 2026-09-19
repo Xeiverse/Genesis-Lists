@@ -14,6 +14,7 @@ API contract, shared types, web, and server should evolve together under SDD.
 genesis-lists/
   apps/web/           # Vite React MUI
   apps/server/        # Fastify API
+  apps/android/       # Kotlin Compose companion (Gradle; outside pnpm)
   packages/shared/    # Shared Zod schemas / types aligned to OpenAPI
   docs/               # Specs (canonical OpenAPI under docs/openapi/)
 ```

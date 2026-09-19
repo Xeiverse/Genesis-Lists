@@ -85,7 +85,7 @@ export function resolveOidcSettingsFromEnv(env: NodeJS.ProcessEnv): OidcSettings
     clientId,
     clientSecret,
     scope: env.OIDC_SCOPE?.trim() || "openid profile email",
-    buttonText: env.OIDC_BUTTON_TEXT?.trim() || "Sign in with OIDC",
+    buttonText: env.OIDC_BUTTON_TEXT?.trim() || "Login with OAuth",
     autoRegister: envFlag(env.OIDC_AUTO_REGISTER, true),
     autoLaunch: envFlag(env.OIDC_AUTO_LAUNCH, false),
     emailClaim: env.OIDC_EMAIL_CLAIM?.trim() || "email",
@@ -238,6 +238,13 @@ export function createMockOidcProvider(
 }
 
 export const OIDC_STATE_TTL_MS = 10 * 60 * 1000;
+
+/** One-time ticket lifetime for Android Custom Tabs → app handoff. */
+export const OIDC_MOBILE_TICKET_TTL_MS = 2 * 60 * 1000;
+
+/** Deep link the Android app registers for OIDC completion. */
+export const ANDROID_OAUTH_CALLBACK_URI = "uk.co.xeiverse.genesislists://oauth-callback";
+
 
 export function newOidcStateMaterials() {
   const state = openid.randomState();

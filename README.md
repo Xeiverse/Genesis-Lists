@@ -19,6 +19,7 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 - Registration closes after the first account unless you leave it open
 - Change password from Settings (other sessions are signed out)
 - Material Design 3 responsive web UI
+- Native Android companion (Kotlin / Compose) for self-hosted servers
 - Docker self-hosting with SQLite
 
 ## Documentation
@@ -36,8 +37,9 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 | [Authentik OAuth](docs/guides/oauth-authentik.md) | OIDC setup with Authentik |
 | [Changelog](CHANGELOG.md) | Release notes |
 | [Security](docs/07-security.md) | Auth & threat notes |
-| [Roadmap](docs/08-roadmap.md) | PWA, OIDC follow-ups, further sharing |
+| [Roadmap](docs/08-roadmap.md) | PWA, Android companion, further sharing |
 | [ADRs](docs/adr/) | Architecture decisions |
+| [Android companion](apps/android/README.md) | Build/run the native Android client |
 | [MVP acceptance](docs/acceptance/mvp-checklist.md) | MVP verification checklist |
 | [Sharing acceptance](docs/acceptance/sharing-checklist.md) | Sharing verification checklist |
 | [OIDC acceptance](docs/acceptance/oidc-checklist.md) | OIDC verification checklist |
@@ -73,11 +75,24 @@ Open http://localhost:3000. That path leaves registration open and cookies usabl
 
 For a server, follow [Self-hosting](docs/06-self-hosting.md): generate `SESSION_SECRET`, set `COOKIE_SECURE=true`, keep registration in bootstrap mode, and put HTTPS in front. After `v0.2.0` is published, pin `GENESIS_LISTS_VERSION` and `docker compose pull` instead of rebuilding from git.
 
+## Android companion
+
+Optional native client for phones/tablets. Not part of the pnpm workspace — use Gradle from `apps/android/`:
+
+```bash
+cd apps/android
+./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+```
+
+CI runs the Android unit tests on every pull request. Configure the self-hosted server base URL in the app. Prefer HTTPS; cleartext HTTP is allowed only for private LAN / localhost / emulator hosts (see [apps/android/README.md](apps/android/README.md) and [ADR 0007](docs/adr/0007-android-companion.md)).
+
 ## Monorepo layout
 
 ```
 apps/web/           React + Vite + MUI
 apps/server/        Fastify API + SQLite
+apps/android/       Kotlin + Compose companion (Gradle)
 packages/shared/    Shared Zod schemas / types
 docs/               Specs (canonical OpenAPI)
 ```

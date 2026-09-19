@@ -13,6 +13,8 @@ import {
 import { isUniqueViolation, type Db, type UserRow } from "../db/index.js";
 import {
   OIDC_STATE_TTL_MS,
+  OIDC_MOBILE_TICKET_TTL_MS,
+  ANDROID_OAUTH_CALLBACK_URI,
   newOidcStateMaterials,
   type OidcClaims,
   type OidcProvider,
@@ -27,6 +29,7 @@ import {
   uuid,
   type RegistrationMode,
 } from "../util.js";
+import { z } from "zod";
 
 function sessionExpiry() {
   const d = new Date();
@@ -37,6 +40,15 @@ function sessionExpiry() {
 function oidcStateExpiry() {
   return new Date(Date.now() + OIDC_STATE_TTL_MS).toISOString();
 }
+
+function oidcMobileTicketExpiry() {
+  return new Date(Date.now() + OIDC_MOBILE_TICKET_TTL_MS).toISOString();
+}
+
+const mobileExchangeSchema = z.object({
+  ticket: z.string().trim().min(1).max(128),
+});
+
 
 function validationDetail(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
   return (
@@ -53,7 +65,7 @@ function disabledOidcSettings(): OidcSettings {
     clientId: "",
     clientSecret: "",
     scope: "openid profile email",
-    buttonText: "Sign in with OIDC",
+    buttonText: "Login with OAuth",
     autoRegister: true,
     autoLaunch: false,
     emailClaim: "email",
@@ -194,6 +206,46 @@ export async function registerAuth(
 
   function pruneOidcLoginStates() {
     db.prepare(`DELETE FROM oidc_login_states WHERE expires_at <= ?`).run(nowIso());
+    db.prepare(`DELETE FROM oidc_mobile_tickets WHERE expires_at <= ?`).run(nowIso());
+  }
+
+  function androidHandoffPath(query: Record<string, string>) {
+    const params = new URLSearchParams(query);
+    return `/api/auth/oidc/android-handoff?${params.toString()}`;
+  }
+
+  function androidAppDeepLink(query: Record<string, string>) {
+    const url = new URL(ANDROID_OAUTH_CALLBACK_URI);
+    for (const [key, value] of Object.entries(query)) {
+      url.searchParams.set(key, value);
+    }
+    return url.href;
+  }
+
+  function androidHandoffHtml(deepLink: string) {
+    const escapedHref = deepLink
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const escapedJs = deepLink
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Open Genesis Lists</title>
+  <meta http-equiv="refresh" content="0;url=${escapedHref}"/>
+  <script>location.replace('${escapedJs}');</script>
+</head>
+<body>
+  <p><a href="${escapedHref}">Open Genesis Lists</a></p>
+</body>
+</html>`;
   }
 
   function createSession(userId: string) {
@@ -271,6 +323,7 @@ export async function registerAuth(
       enabled: oidcSettings.enabled,
       buttonText: oidcSettings.buttonText,
       autoLaunch: oidcSettings.autoLaunch,
+      mobileLogin: true,
     },
   }));
 
@@ -346,18 +399,22 @@ export async function registerAuth(
     return reply.send(toUserDto(row.id)!);
   });
 
-  app.get("/api/auth/oidc/start", async (_request, reply) => {
+  app.get("/api/auth/oidc/start", async (request, reply) => {
     if (!oidc || !oidcSettings.enabled) {
       return sendError(reply, 404, "NOT_FOUND", "OIDC is not enabled");
     }
+
+    const query = request.query as Record<string, string | undefined>;
+    const clientRaw = (query.client ?? "").trim().toLowerCase();
+    const client = clientRaw === "android" ? "android" : null;
 
     try {
       pruneOidcLoginStates();
       const { state, codeVerifier, nonce } = newOidcStateMaterials();
       db.prepare(
-        `INSERT INTO oidc_login_states (state, code_verifier, nonce, expires_at, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).run(state, codeVerifier, nonce, oidcStateExpiry(), nowIso());
+        `INSERT INTO oidc_login_states (state, code_verifier, nonce, client, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(state, codeVerifier, nonce, client, oidcStateExpiry(), nowIso());
 
       const url = await oidc.buildAuthorizationUrl({
         state,
@@ -378,20 +435,31 @@ export async function registerAuth(
   });
 
   app.get("/api/auth/oidc/callback", async (request, reply) => {
+    pruneOidcLoginStates();
+
+    const query = request.query as Record<string, string | undefined>;
+    const state = query.state;
+    const cookieState = readOidcStateCookie(request);
+
+    let androidClient = false;
+    if (state) {
+      const peek = db
+        .prepare(`SELECT client FROM oidc_login_states WHERE state = ?`)
+        .get(state) as { client: string | null } | undefined;
+      androidClient = peek?.client === "android";
+    }
+
     const failRedirect = () => {
       clearOidcStateCookie(reply);
+      if (androidClient) {
+        return reply.redirect(androidHandoffPath({ error: "oidc" }));
+      }
       return reply.redirect("/login?error=oidc");
     };
 
     if (!oidc || !oidcSettings.enabled) {
       return failRedirect();
     }
-
-    pruneOidcLoginStates();
-
-    const query = request.query as Record<string, string | undefined>;
-    const state = query.state;
-    const cookieState = readOidcStateCookie(request);
 
     if (query.error) {
       if (state) {
@@ -409,18 +477,20 @@ export async function registerAuth(
 
     const stored = db
       .prepare(
-        `SELECT state, code_verifier, nonce, expires_at FROM oidc_login_states WHERE state = ?`,
+        `SELECT state, code_verifier, nonce, client, expires_at FROM oidc_login_states WHERE state = ?`,
       )
       .get(state) as
       | {
           state: string;
           code_verifier: string;
           nonce: string | null;
+          client: string | null;
           expires_at: string;
         }
       | undefined;
 
     db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+    androidClient = stored?.client === "android";
 
     if (!stored || stored.expires_at <= nowIso()) {
       return failRedirect();
@@ -442,12 +512,92 @@ export async function registerAuth(
       const { userId } = resolveUserFromOidcClaims(claims);
       const sessionId = createSession(userId);
       clearOidcStateCookie(reply);
+
+      if (androidClient) {
+        const ticket = uuid();
+        db.prepare(
+          `INSERT INTO oidc_mobile_tickets (ticket, session_id, expires_at, created_at)
+           VALUES (?, ?, ?, ?)`,
+        ).run(ticket, sessionId, oidcMobileTicketExpiry(), nowIso());
+        return reply.redirect(androidHandoffPath({ ticket }));
+      }
+
       setSessionCookie(reply, sessionId);
       return reply.redirect("/");
     } catch (err) {
       app.log.error?.(err);
       return failRedirect();
     }
+  });
+
+  app.get("/api/auth/oidc/android-handoff", async (request, reply) => {
+    const query = request.query as Record<string, string | undefined>;
+    const ticket = query.ticket?.trim();
+    const error = query.error?.trim();
+
+    const deepLinkQuery: Record<string, string> = {};
+    if (ticket) {
+      deepLinkQuery.ticket = ticket;
+    } else if (error) {
+      deepLinkQuery.error = error;
+    } else {
+      deepLinkQuery.error = "oidc";
+    }
+
+    const deepLink = androidAppDeepLink(deepLinkQuery);
+    return reply
+      .type("text/html; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .send(androidHandoffHtml(deepLink));
+  });
+
+  app.post("/api/auth/oidc/mobile-exchange", async (request, reply) => {
+    if (!oidc || !oidcSettings.enabled) {
+      return sendError(reply, 404, "NOT_FOUND", "OIDC is not enabled");
+    }
+
+    const parsed = mobileExchangeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
+    }
+
+    pruneOidcLoginStates();
+
+    const ticket = parsed.data.ticket;
+    const row = db
+      .prepare(
+        `SELECT ticket, session_id, expires_at FROM oidc_mobile_tickets WHERE ticket = ?`,
+      )
+      .get(ticket) as
+      | { ticket: string; session_id: string; expires_at: string }
+      | undefined;
+
+    if (!row) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid or expired ticket");
+    }
+
+    db.prepare(`DELETE FROM oidc_mobile_tickets WHERE ticket = ?`).run(ticket);
+
+    if (row.expires_at <= nowIso()) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid or expired ticket");
+    }
+
+    const session = db
+      .prepare(`SELECT id, user_id, expires_at FROM sessions WHERE id = ?`)
+      .get(row.session_id) as
+      | { id: string; user_id: string; expires_at: string }
+      | undefined;
+
+    if (!session || session.expires_at <= nowIso()) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid or expired ticket");
+    }
+
+    setSessionCookie(reply, session.id);
+    const user = toUserDto(session.user_id);
+    if (!user) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid or expired ticket");
+    }
+    return reply.send(user);
   });
 
   app.post("/api/auth/logout", async (request, reply) => {

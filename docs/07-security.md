@@ -24,6 +24,13 @@
 
 See [ADR 0005](adr/0005-oidc.md) and [guides/oauth-authentik.md](guides/oauth-authentik.md).
 
+## Android companion
+
+- Session cookie stored in EncryptedSharedPreferences via OkHttp `CookieJar` (same `genesis_session` as web). Backup is disabled on the app.
+- Android OIDC uses Custom Tabs + a one-time server ticket (`oidc_mobile_tickets`, short TTL). The HTTPS handoff page does **not** set a session cookie; only `POST /api/auth/oidc/mobile-exchange` does, into the app jar. Deep-link intent data is cleared after parse; a consumed ticket is not re-exchanged when a session already exists.
+- Cleartext HTTP is rejected unless the host is private LAN / localhost / emulator / `.local` (`ServerUrlPolicy`). Network Security Config remains permissive because CIDRs cannot be expressed in XML.
+- Custom proxy headers (encrypted prefs) survive logout and server URL changes; session cookies and Room cache do not survive a URL change.
+
 ## Password & email policy
 
 See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB are rejected (`400 VALIDATION_ERROR`). Max lengths are enforced at the validation layer (Zod).
@@ -53,6 +60,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
 | OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser; one-time server-side state rows |
+| Android OIDC ticket replay | One-time `oidc_mobile_tickets` row deleted on exchange; short TTL; no session cookie on handoff HTML |
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
 | Secret leakage | `SESSION_SECRET` / `OIDC_CLIENT_SECRET` via env; never commit secrets; refuse placeholders and secrets shorter than 32 characters when `COOKIE_SECURE=true` |

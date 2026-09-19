@@ -48,7 +48,7 @@ export function LoginPage() {
           setConfig({
             registrationOpen: false,
             passwordLoginEnabled: true,
-            oidc: { enabled: false, buttonText: "Sign in with OIDC", autoLaunch: false },
+            oidc: { enabled: false, buttonText: "Login with OAuth", autoLaunch: false, mobileLogin: true },
           });
         }
       });

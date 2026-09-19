@@ -164,6 +164,16 @@ describe("schema migrations", () => {
       )
       .get() as { name: string } | undefined;
     assert.equal(oidcStates?.name, "oidc_login_states");
+    const tickets = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'oidc_mobile_tickets'`,
+      )
+      .get() as { name: string } | undefined;
+    assert.equal(tickets?.name, "oidc_mobile_tickets");
+    const clientCol = db
+      .prepare(`PRAGMA table_info(oidc_login_states)`)
+      .all() as Array<{ name: string }>;
+    assert.ok(clientCol.some((c) => c.name === "client"));
     db.close();
   });
 });

@@ -6,11 +6,13 @@ Verify against [01-requirements.md](../01-requirements.md) (`REQ-OIDC-*`) and `d
 
 - [x] **REQ-OIDC-01** `OIDC_ENABLED=false` (default): OIDC start returns `404`; process starts without issuer settings — *API test*
 - [ ] **REQ-OIDC-01** `OIDC_ENABLED=true` without required env or with bad discovery: process refuses to start — *manual / ops*
-- [x] **REQ-OIDC-06** `GET /api/auth/config` returns `registrationOpen`, `passwordLoginEnabled`, and `oidc.{ enabled, buttonText, autoLaunch }` — *API test*
+- [x] **REQ-OIDC-06** `GET /api/auth/config` returns `registrationOpen`, `passwordLoginEnabled`, and `oidc.{ enabled, buttonText, autoLaunch, mobileLogin }` — *API test*
 
 ## Login flows
 
 - [x] **REQ-OIDC-02** OIDC start redirects to the IdP; successful callback sets `genesis_session` and redirects to `/` — *API test with mock provider*
+- [x] Android `?client=android`: callback redirects to HTTPS android-handoff with a one-time ticket (no session cookie); `POST /api/auth/oidc/mobile-exchange` sets the cookie; ticket reuse returns `401` — *API test*
+- [ ] Android: after successful OIDC login, activity recreation (rotation) stays signed in without re-exchanging a stale deep-link ticket — *manual*
 - [x] **REQ-OIDC-03** Second login with the same `(issuer, sub)` reuses the same local user — *covered by identity lookup before merge*
 - [x] **REQ-OIDC-04** Existing local account registered before the IdP was connected links when the IdP email claim matches its email, case-insensitively — *API test (bob merge)*
 - [x] **REQ-OIDC-04** Unknown email with `OIDC_AUTO_REGISTER=true` creates a user with null password, the claimed email, and a display name from the name claim — *API test*

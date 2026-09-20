@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Android explains login/OIDC failures when `COOKIE_SECURE=true` is used with an `http://` server URL (the session cookie is dropped)
 - GitHub Actions builds the Android companion APK when a GitHub Release is published and attaches it to that release
 - Android Release signs unsigned APKs so tags without a Gradle signing config (including `v0.3.0`) still attach a sideloadable artifact
 

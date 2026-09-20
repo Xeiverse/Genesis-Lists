@@ -256,6 +256,7 @@ Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in 
 |---------|----------------|
 | Container exits immediately, log says `SESSION_SECRET is required` | `COOKIE_SECURE=true` with a missing, short, or placeholder secret. Generate a new one and recreate. |
 | Login works, then you are logged out | `COOKIE_SECURE` does not match the URL scheme. HTTPS requires `true`. HTTP (localhost only) requires `false`. |
+| Android login then **Authentication required**, or **OIDC sign-in failed** | Same cookie mismatch: `COOKIE_SECURE=true` on an `http://` LAN URL. The Android 0.3.x app now spells this out; set `COOKIE_SECURE=false` for HTTP-only Compose or use HTTPS. Recreate the container after changing env. |
 | Empty lists after an update | Volume name changed (`docker volume ls`). Point Compose back at the volume that has `app.db`. |
 | `EACCES` writing `/data` | Volume is still owned by root. `chown` to `10001:10001` as above. |
 | Register link is missing; register page says registration is closed | Expected after the first account when mode is `bootstrap`. Set `ALLOW_REGISTRATION=true`, recreate, add the account, then close it again. Also hidden when `OIDC_DISABLE_PASSWORD_LOGIN=true`. |

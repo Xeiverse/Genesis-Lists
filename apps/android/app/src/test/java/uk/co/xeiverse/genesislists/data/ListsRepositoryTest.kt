@@ -309,6 +309,29 @@ class ListsRepositoryTest {
         assertTrue(restored.matches(url))
     }
 
+    @Test
+    fun sessionCookieBlockedOnCleartext_whenSecureCookieOnHttp() {
+        val jar = PersistentCookieJar(InMemorySharedPreferences())
+        val http = "http://192.168.68.63/".toHttpUrl()
+        jar.saveFromResponse(
+            http,
+            listOf(
+                Cookie.Builder()
+                    .name(PersistentCookieJar.SESSION_COOKIE)
+                    .value("session")
+                    .hostOnlyDomain("192.168.68.63")
+                    .path("/")
+                    .expiresAt(System.currentTimeMillis() + 86_400_000)
+                    .secure()
+                    .build(),
+            ),
+        )
+        assertTrue(jar.sessionCookieBlockedOnCleartext(http))
+        assertFalse(
+            jar.sessionCookieBlockedOnCleartext("https://192.168.68.63/".toHttpUrl()),
+        )
+    }
+
     private fun repository(dao: CacheDao, online: Boolean): ListsRepository {
         val client = GenesisApiClient(
             baseUrlProvider = { "https://example.test" },

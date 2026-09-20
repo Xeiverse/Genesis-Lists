@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class OfflineMutationException(
     message: String = "You are offline. Changes require a network connection.",
@@ -125,6 +126,7 @@ class ListsRepository(
     suspend fun login(email: String, password: String): UserDto {
         requireOnline()
         val user = api.login(email, password)
+        requireUsableSessionCookie()
         refreshLists()
         return user
     }
@@ -132,6 +134,7 @@ class ListsRepository(
     suspend fun register(email: String, password: String, name: String? = null): UserDto {
         requireOnline()
         val user = api.register(email, password, name)
+        requireUsableSessionCookie()
         refreshLists()
         return user
     }
@@ -139,6 +142,7 @@ class ListsRepository(
     suspend fun exchangeOidcTicket(ticket: String): UserDto {
         requireOnline()
         val user = api.mobileOidcExchange(ticket)
+        requireUsableSessionCookie()
         refreshLists()
         return user
     }
@@ -251,6 +255,14 @@ class ListsRepository(
     }
 
     fun hasSession(): Boolean = cookieJar.hasSessionCookie()
+
+    private fun requireUsableSessionCookie() {
+        val base = settings.baseUrl ?: return
+        val url = runCatching { "${base.trimEnd('/')}/".toHttpUrl() }.getOrNull() ?: return
+        if (cookieJar.sessionCookieBlockedOnCleartext(url)) {
+            throw ApiException(0, "COOKIE_SECURE_HTTP", OAuthDeepLink.CLEARTEXT_SECURE_COOKIE_HINT)
+        }
+    }
 
     companion object {
         fun normalizeBaseUrl(url: String): String {

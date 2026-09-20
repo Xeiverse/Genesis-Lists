@@ -38,6 +38,12 @@ class PersistentCookieJar(
         return valid
     }
 
+    /** True when a Secure session cookie was stored but will not be sent on this HTTP URL. */
+    fun sessionCookieBlockedOnCleartext(url: HttpUrl): Boolean =
+        loadForHost(hostKey(url)).any {
+            it.name == SESSION_COOKIE && it.secure && !url.isHttps
+        }
+
     fun clear() {
         prefs.edit().clear().apply()
     }

@@ -21,7 +21,7 @@ From this directory:
 ```
 
 CI runs `:app:testDebugUnitTest` on every pull request (see `.github/workflows/ci.yml`).
-Tagged releases also run [Android Release](../../.github/workflows/android-release.yml) when the GitHub Release is published, which builds a release APK and attaches `genesis-lists-<version>.apk`. Without `ANDROID_KEYSTORE_*` secrets the release build is debug-signed so it stays sideloadable; set those secrets for a stable signing key.
+Tagged releases also run [Android Release](../../.github/workflows/android-release.yml) when the GitHub Release is published, which builds a release APK and attaches `genesis-lists-<version>.apk`. Without `ANDROID_KEYSTORE_*` secrets the APK is debug-signed so it stays sideloadable; set those secrets for a stable signing key. The workflow signs with `apksigner` when the tag's Gradle config leaves the APK unsigned (as `v0.3.0` does).
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 

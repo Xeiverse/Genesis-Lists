@@ -6,7 +6,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 0.3.0 — email login, native Android companion, sharing, and optional OIDC. PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v0.3.0` release publishes `ghcr.io/xeiverse/genesis-lists`.
+**Version:** 0.3.1 — email login, native Android companion, sharing, and optional OIDC. PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v0.3.1` release publishes `ghcr.io/xeiverse/genesis-lists` and attaches the Android APK.
 
 ## Features
 
@@ -73,7 +73,7 @@ docker compose up -d --build
 
 Open http://localhost:3000. That path leaves registration open and cookies usable on HTTP. It is not a public deploy.
 
-For a server, follow [Self-hosting](docs/06-self-hosting.md): generate `SESSION_SECRET`, set `COOKIE_SECURE=true`, keep registration in bootstrap mode, and put HTTPS in front. Pin `GENESIS_LISTS_VERSION=0.3.0` and `docker compose pull`, or rebuild from git with `docker compose up -d --build`.
+For a server, follow [Self-hosting](docs/06-self-hosting.md): generate `SESSION_SECRET`, set `COOKIE_SECURE=true`, keep registration in bootstrap mode, and put HTTPS in front. Pin `GENESIS_LISTS_VERSION=0.3.1` and `docker compose pull`, or rebuild from git with `docker compose up -d --build`.
 
 ## Android companion
 

@@ -2,9 +2,18 @@
 
 ## Unreleased
 
+## 0.3.1
+
+### Android GitHub Release APK
+
+- GitHub Actions builds the Android companion APK when a GitHub Release is published and attaches `genesis-lists-<version>.apk`
+- Release Gradle builds are debug-signed when no keystore is provided, so sideloading works without Play signing secrets
+- Android Release signs unsigned APKs with `apksigner` so older tags without a Gradle signing config (including `v0.3.0`) still attach an installable artifact
+- Release `versionName` / `versionCode` can be overridden with `-PversionName=` (versionCode is derived from semver)
+
+### Android session cookies on HTTP
+
 - Android explains password-login failures when `COOKIE_SECURE=true` is used with an `http://` server URL (the session cookie cannot be sent). A blocked Secure cookie is not treated as a signed-in session, so a later OIDC retry still exchanges the ticket. HTTP OIDC Custom Tabs failures hint at the same mismatch without asserting it as the only cause.
-- GitHub Actions builds the Android companion APK when a GitHub Release is published and attaches it to that release
-- Android Release signs unsigned APKs so tags without a Gradle signing config (including `v0.3.0`) still attach a sideloadable artifact
 
 ## 0.3.0
 

@@ -17,6 +17,14 @@ describe("resolveOidcSettingsFromEnv", () => {
     const resolved = resolveOidcSettingsFromEnv({} as NodeJS.ProcessEnv);
     assert.equal(resolved.emailClaim, "email");
     assert.equal(resolved.nameClaim, "name");
+    assert.equal(resolved.requireEmailVerified, true);
+  });
+
+  it("allows requireEmailVerified to be disabled", () => {
+    const resolved = resolveOidcSettingsFromEnv({
+      OIDC_REQUIRE_EMAIL_VERIFIED: "false",
+    } as NodeJS.ProcessEnv);
+    assert.equal(resolved.requireEmailVerified, false);
   });
 
   it("allows the claim names to be overridden", () => {
@@ -111,6 +119,19 @@ describe("extractOidcClaims", () => {
       sub: "sub-1",
       email: "alice@example.com",
     });
+    assert.equal(claims.email, "alice@example.com");
+  });
+
+  it("accepts an unverified email when requireEmailVerified is false", () => {
+    const claims = extractOidcClaims(
+      settings({ requireEmailVerified: false }),
+      issuer,
+      {
+        sub: "sub-1",
+        email: "alice@example.com",
+        email_verified: false,
+      },
+    );
     assert.equal(claims.email, "alice@example.com");
   });
 

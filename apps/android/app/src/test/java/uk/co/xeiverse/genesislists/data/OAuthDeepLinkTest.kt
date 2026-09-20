@@ -23,6 +23,29 @@ class OAuthDeepLinkTest {
         )
         assertTrue(result is OAuthDeepLink.Result.Error)
         assertEquals("oidc", (result as OAuthDeepLink.Result.Error).code)
+        assertEquals(null, result.reason)
+    }
+
+    @Test
+    fun parse_error_with_reason() {
+        val result = OAuthDeepLink.parse(
+            "uk.co.xeiverse.genesislists://oauth-callback?error=oidc&reason=missing_state_cookie",
+        )
+        assertTrue(result is OAuthDeepLink.Result.Error)
+        val error = result as OAuthDeepLink.Result.Error
+        assertEquals("oidc", error.code)
+        assertEquals("missing_state_cookie", error.reason)
+    }
+
+    @Test
+    fun parse_missing_ticket_is_error() {
+        val result = OAuthDeepLink.parse(
+            "uk.co.xeiverse.genesislists://oauth-callback",
+        )
+        assertTrue(result is OAuthDeepLink.Result.Error)
+        val error = result as OAuthDeepLink.Result.Error
+        assertEquals("oidc", error.code)
+        assertEquals("missing_ticket", error.reason)
     }
 
     @Test
@@ -61,5 +84,11 @@ class OAuthDeepLinkTest {
             OAuthDeepLink.oidcFailureMessage("https://lists.example.com"),
         )
         assertEquals("OIDC sign-in failed", OAuthDeepLink.oidcFailureMessage(null))
+        assertTrue(
+            OAuthDeepLink.oidcFailureMessage(
+                "https://lists.example.com",
+                "email_unverified",
+            ).contains("email as verified"),
+        )
     }
 }

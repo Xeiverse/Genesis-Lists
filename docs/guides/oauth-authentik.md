@@ -64,6 +64,7 @@ OIDC_AUTO_REGISTER=true
 OIDC_AUTO_LAUNCH=false
 OIDC_EMAIL_CLAIM=email
 OIDC_NAME_CLAIM=name
+OIDC_REQUIRE_EMAIL_VERIFIED=false
 OIDC_DISABLE_PASSWORD_LOGIN=false
 ```
 
@@ -106,7 +107,7 @@ The `email` scope must be granted to the provider, and every Authentik user sign
 | `OIDC_EMAIL_CLAIM` | `email` | The account identifier. Must be a valid address; it is matched (lower-cased) against `users.email` to link or create the local account |
 | `OIDC_NAME_CLAIM` | `name` | Display name used when creating a new account. Falls back to the part of the email before the `@`. Only applied at creation, so a user's own renames are not overwritten |
 
-Genesis Lists refuses the login unless `email_verified` is absent or affirmative. An IdP that serializes the flag as the string `"false"` is treated as unverified.
+Genesis Lists refuses the login unless `email_verified` is absent or affirmative, or you set `OIDC_REQUIRE_EMAIL_VERIFIED=false`. Authentik local users typically send `email_verified=false` until you mark the address verified (Directory → Users → the user). For a private Authentik you control, set `OIDC_REQUIRE_EMAIL_VERIFIED=false` in the Genesis Lists env and recreate the container.
 
 ## 5. Troubleshooting
 
@@ -114,8 +115,8 @@ Genesis Lists refuses the login unless `email_verified` is absent or affirmative
 |---------|----------------|
 | Container exits; OIDC discovery error | Issuer URL, trailing slash, TLS/CA inside the container, proxy not returning HTML/login page for `.well-known` |
 | Redirect URI mismatch | Authentik Strict URI must equal `PUBLIC_BASE_URL` + `/api/auth/oidc/callback` (or `OIDC_REDIRECT_URI`) |
-| Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim (check the `email` scope and that the user has an address); `email_verified` present and not affirmative; `OIDC_AUTO_REGISTER=false` with no matching local user |
-| Android **OIDC sign-in failed** after Authentik | If the app URL is `http://`, a local HTTP server needs `COOKIE_SECURE=false` (recreate the container); a production host should be entered as its HTTPS origin. Custom Tabs cannot observe the `Secure` flag, so also check redirect URI and email claims as above. |
+| Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim; `email_verified` present and not affirmative (verify the address in Authentik, or set `OIDC_REQUIRE_EMAIL_VERIFIED=false`); `OIDC_AUTO_REGISTER=false` with no matching local user |
+| Android **OIDC sign-in failed** after Authentik | Same email-claim / `email_verified` causes as web. Custom Tabs also drop the OIDC state cookie; current servers bind Android by the one-time `state` row instead. On `http://`, COOKIE_SECURE must be false. |
 | Password form still shown | `OIDC_DISABLE_PASSWORD_LOGIN` only applies when `OIDC_ENABLED=true`; recreate container after env change |
 | Encryption / token errors with Authentik | Leave the provider **encryption key** empty; keep a signing key |
 

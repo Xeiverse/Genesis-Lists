@@ -71,6 +71,7 @@ function disabledOidcSettings(): OidcSettings {
     emailClaim: "email",
     nameClaim: "name",
     disablePasswordLogin: false,
+    requireEmailVerified: true,
     redirectUri: "",
   };
 }
@@ -449,30 +450,41 @@ export async function registerAuth(
       androidClient = peek?.client === "android";
     }
 
-    const failRedirect = () => {
+    const failRedirect = (reason: string) => {
       clearOidcStateCookie(reply);
       if (androidClient) {
-        return reply.redirect(androidHandoffPath({ error: "oidc" }));
+        return reply.redirect(androidHandoffPath({ error: "oidc", reason }));
       }
-      return reply.redirect("/login?error=oidc");
+      const login = new URLSearchParams({ error: "oidc", reason });
+      return reply.redirect(`/login?${login.toString()}`);
     };
 
     if (!oidc || !oidcSettings.enabled) {
-      return failRedirect();
+      return failRedirect("oidc_disabled");
     }
 
     if (query.error) {
       if (state) {
         db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
       }
-      return failRedirect();
+      return failRedirect("idp_error");
     }
 
-    if (!state || !cookieState || state !== cookieState) {
-      if (state) {
+    if (!state) {
+      return failRedirect("missing_state");
+    }
+    // Custom Tabs bounce through the IdP (Authentik) after a 302 from /oidc/start.
+    // Chrome drops the SameSite cookie set on that bounce, so Android cannot use
+    // the cookie as login-CSRF. The one-time `state` row is the binding instead.
+    if (!androidClient) {
+      if (!cookieState) {
         db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+        return failRedirect("missing_state_cookie");
       }
-      return failRedirect();
+      if (state !== cookieState) {
+        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+        return failRedirect("state_cookie_mismatch");
+      }
     }
 
     const stored = db
@@ -493,13 +505,14 @@ export async function registerAuth(
     androidClient = stored?.client === "android";
 
     if (!stored || stored.expires_at <= nowIso()) {
-      return failRedirect();
+      return failRedirect("missing_or_expired_login_state");
     }
 
     try {
       const callbackUrl = new URL(oidcSettings.redirectUri);
       for (const [key, value] of Object.entries(query)) {
-        if (value != null) callbackUrl.searchParams.set(key, value);
+        const text = Array.isArray(value) ? value[0] : value;
+        if (typeof text === "string") callbackUrl.searchParams.set(key, text);
       }
 
       const claims = await oidc.exchangeCallback({
@@ -526,7 +539,17 @@ export async function registerAuth(
       return reply.redirect("/");
     } catch (err) {
       app.log.error?.(err);
-      return failRedirect();
+      const message = err instanceof Error ? err.message : "unknown";
+      const lower = message.toLowerCase();
+      let reason = "exchange_or_user_failed";
+      if (lower.includes("email_verified")) reason = "email_unverified";
+      else if (lower.includes("missing") && lower.includes("email")) reason = "missing_email";
+      else if (lower.includes("not a valid email")) reason = "invalid_email";
+      else if (message.includes("OIDC_EMAIL_TAKEN")) reason = "email_taken";
+      else if (message.includes("OIDC_AUTO_REGISTER_DISABLED")) reason = "auto_register_disabled";
+      else if (lower.includes("missing sub")) reason = "missing_sub";
+      else if (lower.includes("id token")) reason = "missing_id_token";
+      return failRedirect(reason);
     }
   });
 
@@ -542,6 +565,10 @@ export async function registerAuth(
       deepLinkQuery.error = error;
     } else {
       deepLinkQuery.error = "oidc";
+    }
+    const reason = query.reason?.trim();
+    if (reason) {
+      deepLinkQuery.reason = reason;
     }
 
     const deepLink = androidAppDeepLink(deepLinkQuery);

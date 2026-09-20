@@ -18,6 +18,7 @@ export type OidcSettings = {
   emailClaim: string;
   nameClaim: string;
   disablePasswordLogin: boolean;
+  requireEmailVerified: boolean;
   redirectUri: string;
 };
 
@@ -91,6 +92,7 @@ export function resolveOidcSettingsFromEnv(env: NodeJS.ProcessEnv): OidcSettings
     emailClaim: env.OIDC_EMAIL_CLAIM?.trim() || "email",
     nameClaim: env.OIDC_NAME_CLAIM?.trim() || "name",
     disablePasswordLogin: enabled && envFlag(env.OIDC_DISABLE_PASSWORD_LOGIN, false),
+    requireEmailVerified: envFlag(env.OIDC_REQUIRE_EMAIL_VERIFIED, true),
     redirectUri,
   };
 }
@@ -126,8 +128,9 @@ export function extractOidcClaims(
 
   // An IdP that lets users set an unverified address could otherwise claim
   // someone else's account (07-security.md). An absent claim is accepted
-  // because not every IdP emits it.
-  if (!emailIsVerified(claims.email_verified)) {
+  // because not every IdP emits it. Private IdPs such as Authentik often
+  // emit email_verified=false for local users; operators can disable this.
+  if (settings.requireEmailVerified && !emailIsVerified(claims.email_verified)) {
     throw new Error("OIDC token does not assert email_verified");
   }
 

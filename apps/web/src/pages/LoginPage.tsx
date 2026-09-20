@@ -34,6 +34,7 @@ export function LoginPage() {
   const [config, setConfig] = useState<AuthConfigDto | null>(null);
 
   const oidcError = searchParams.get("error") === "oidc";
+  const oidcReason = searchParams.get("reason");
   const autoLaunchParam = searchParams.get("autoLaunch");
 
   useEffect(() => {
@@ -119,7 +120,10 @@ export function LoginPage() {
           </Typography>
           {(error || oidcError) && (
             <Alert severity="error">
-              {error ?? "Sign-in with the identity provider failed. Try again."}
+              {error ??
+                (oidcReason === "email_unverified"
+                  ? "The identity provider did not mark your email as verified. In Authentik, mark the user's email as verified, or set OIDC_REQUIRE_EMAIL_VERIFIED=false on Genesis Lists if you trust this IdP."
+                  : "Sign-in with the identity provider failed. Try again.")}
             </Alert>
           )}
           {showPassword && (

@@ -1,6 +1,7 @@
 package uk.co.xeiverse.genesislists.data
 
 import android.content.SharedPreferences
+import uk.co.xeiverse.genesislists.data.api.ApiException
 import uk.co.xeiverse.genesislists.data.api.GenesisApiClient
 import uk.co.xeiverse.genesislists.data.api.ListDto
 import uk.co.xeiverse.genesislists.data.api.ListItemDto
@@ -309,6 +310,99 @@ class ListsRepositoryTest {
         assertTrue(restored.matches(url))
     }
 
+    @Test
+    fun sessionCookieBlockedOnCleartext_whenSecureCookieOnHttp() {
+        val jar = PersistentCookieJar(InMemorySharedPreferences())
+        val http = "http://192.168.1.10/".toHttpUrl()
+        jar.saveFromResponse(
+            http,
+            listOf(secureSessionCookie("192.168.1.10")),
+        )
+        assertTrue(jar.sessionCookieBlockedOnCleartext(http))
+        assertFalse(
+            jar.sessionCookieBlockedOnCleartext("https://192.168.1.10/".toHttpUrl()),
+        )
+        assertTrue(jar.hasSessionCookie())
+    }
+
+    @Test
+    fun loadForRequest_httpDoesNotDeleteSecureSessionCookie() {
+        val jar = PersistentCookieJar(InMemorySharedPreferences())
+        val http = "http://192.168.1.10/".toHttpUrl()
+        jar.saveFromResponse(http, listOf(secureSessionCookie("192.168.1.10")))
+
+        assertTrue(jar.loadForRequest(http).isEmpty())
+        assertTrue(jar.sessionCookieBlockedOnCleartext(http))
+        assertTrue(jar.hasSessionCookie())
+    }
+
+    @Test
+    fun login_secureCookieOnHttp_throwsAndHasNoSession() = runTest {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(loginResponse(secureCookie = true))
+        server.start()
+        try {
+            val (repo, cookieJar) = repositoryAgainstServer(server)
+            try {
+                repo.login("alice@example.com", "password1")
+                fail("expected ApiException")
+            } catch (e: ApiException) {
+                assertEquals("COOKIE_SECURE_HTTP", e.code)
+            }
+            assertFalse(repo.hasSession())
+            assertFalse(cookieJar.hasSessionCookie())
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun login_httpCookieWithoutSecure_refreshesLists() = runTest {
+        val server = okhttp3.mockwebserver.MockWebServer()
+        server.enqueue(loginResponse(secureCookie = false))
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse()
+                .setBody("""{"lists":[]}""")
+                .addHeader("Content-Type", "application/json"),
+        )
+        server.start()
+        try {
+            val (repo, _) = repositoryAgainstServer(server)
+            val user = repo.login("alice@example.com", "password1")
+            assertEquals("alice@example.com", user.email)
+            assertTrue(repo.hasSession())
+            assertEquals(2, server.requestCount)
+            assertEquals("/api/auth/login", server.takeRequest().path)
+            assertEquals("/api/lists", server.takeRequest().path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun hasSession_falseWhenSecureCookieBlockedOnHttp() {
+        val settings = ServerSettingsStore(InMemorySharedPreferences())
+        val cookieJar = PersistentCookieJar(InMemorySharedPreferences())
+        settings.baseUrl = "http://192.168.1.10"
+        cookieJar.saveFromResponse(
+            "http://192.168.1.10/".toHttpUrl(),
+            listOf(secureSessionCookie("192.168.1.10")),
+        )
+        val repo = ListsRepository(
+            api = GenesisApiClient(
+                baseUrlProvider = { settings.baseUrl },
+                client = GenesisApiClient.buildOkHttp(cookieJar),
+            ),
+            dao = InMemoryCacheDao(),
+            settings = settings,
+            cookieJar = cookieJar,
+            connectivity = ConnectivityMonitor { true },
+        )
+        assertTrue(cookieJar.hasSessionCookie())
+        assertFalse(repo.hasSession())
+    }
+
     private fun repository(dao: CacheDao, online: Boolean): ListsRepository {
         val client = GenesisApiClient(
             baseUrlProvider = { "https://example.test" },
@@ -321,6 +415,49 @@ class ListsRepositoryTest {
             cookieJar = PersistentCookieJar(InMemorySharedPreferences()),
             connectivity = ConnectivityMonitor { online },
         )
+    }
+
+    private fun repositoryAgainstServer(
+        server: okhttp3.mockwebserver.MockWebServer,
+    ): Pair<ListsRepository, PersistentCookieJar> {
+        val settings = ServerSettingsStore(InMemorySharedPreferences())
+        val cookieJar = PersistentCookieJar(InMemorySharedPreferences())
+        settings.baseUrl = "http://127.0.0.1:${server.port}"
+        val client = GenesisApiClient(
+            baseUrlProvider = { settings.baseUrl },
+            client = GenesisApiClient.buildOkHttp(cookieJar),
+        )
+        val repo = ListsRepository(
+            api = client,
+            dao = InMemoryCacheDao(),
+            settings = settings,
+            cookieJar = cookieJar,
+            connectivity = ConnectivityMonitor { true },
+        )
+        return repo to cookieJar
+    }
+
+    private fun secureSessionCookie(host: String): Cookie =
+        Cookie.Builder()
+            .name(PersistentCookieJar.SESSION_COOKIE)
+            .value("session")
+            .hostOnlyDomain(host)
+            .path("/")
+            .expiresAt(System.currentTimeMillis() + 86_400_000)
+            .secure()
+            .build()
+
+    private fun loginResponse(secureCookie: Boolean): okhttp3.mockwebserver.MockResponse {
+        val cookie = buildString {
+            append("${PersistentCookieJar.SESSION_COOKIE}=session; Path=/; HttpOnly")
+            if (secureCookie) append("; Secure")
+        }
+        return okhttp3.mockwebserver.MockResponse()
+            .setBody(
+                """{"id":"u1","email":"alice@example.com","name":"alice","authProviders":["password"]}""",
+            )
+            .addHeader("Content-Type", "application/json")
+            .addHeader("Set-Cookie", cookie)
     }
 }
 

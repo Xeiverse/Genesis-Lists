@@ -31,12 +31,21 @@ class PersistentCookieJar(
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
         val key = hostKey(url)
         val now = System.currentTimeMillis()
-        val valid = loadForHost(key).filter { it.expiresAt >= now && it.matches(url) }
-        if (valid.size != loadForHost(key).size) {
-            prefs.edit().putStringSet(key, valid.map { serialize(it) }.toSet()).apply()
+        val stored = loadForHost(key)
+        // Persist expiry cleanup only. Cookie.matches is false for Secure cookies on
+        // HTTP, but those must stay stored so sessionCookieBlockedOnCleartext can see them.
+        val unexpired = stored.filter { it.expiresAt >= now }
+        if (unexpired.size != stored.size) {
+            prefs.edit().putStringSet(key, unexpired.map { serialize(it) }.toSet()).apply()
         }
-        return valid
+        return unexpired.filter { it.matches(url) }
     }
+
+    /** True when a Secure session cookie was stored but will not be sent on this HTTP URL. */
+    fun sessionCookieBlockedOnCleartext(url: HttpUrl): Boolean =
+        loadForHost(hostKey(url)).any {
+            it.name == SESSION_COOKIE && it.secure && !url.isHttps
+        }
 
     fun clear() {
         prefs.edit().clear().apply()

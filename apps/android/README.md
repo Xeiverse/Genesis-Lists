@@ -70,6 +70,8 @@ Flow:
 
 Operators only need the usual OIDC env (`OIDC_*`, `PUBLIC_BASE_URL`); see [OIDC guide](../../docs/guides/oauth-authentik.md) and [ADR 0007](../../docs/adr/0007-android-companion.md). If an existing deploy still sets `OIDC_BUTTON_TEXT=Sign in with Authentik` (or similar), update or unset it and recreate the container so the button shows **Login with OAuth**.
 
+The app URL scheme must match `COOKIE_SECURE`. Password login can observe a `Secure` session cookie on `http://` and shows a specific mismatch hint. OIDC uses Chrome Custom Tabs, which do not share cookies with the app, so an HTTP OIDC failure only *hints* that a local HTTP server needs `COOKIE_SECURE=false` (recreate the container) or that production should use the HTTPS origin — redirect URI and email-claim issues can look the same. Do not copy `COOKIE_SECURE=true` from production onto an HTTP-only LAN Compose stack.
+
 ## Settings & custom proxy headers
 
 - **Settings** is reachable from server setup and sign-in (ghost text button), as well as from the lists app bar. Back returns without clearing the server URL or session.

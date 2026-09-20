@@ -115,6 +115,7 @@ Genesis Lists refuses the login unless `email_verified` is absent or affirmative
 | Container exits; OIDC discovery error | Issuer URL, trailing slash, TLS/CA inside the container, proxy not returning HTML/login page for `.well-known` |
 | Redirect URI mismatch | Authentik Strict URI must equal `PUBLIC_BASE_URL` + `/api/auth/oidc/callback` (or `OIDC_REDIRECT_URI`) |
 | Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim (check the `email` scope and that the user has an address); `email_verified` present and not affirmative; `OIDC_AUTO_REGISTER=false` with no matching local user |
+| Android **OIDC sign-in failed** after Authentik | If the app URL is `http://`, a local HTTP server needs `COOKIE_SECURE=false` (recreate the container); a production host should be entered as its HTTPS origin. Custom Tabs cannot observe the `Secure` flag, so also check redirect URI and email claims as above. |
 | Password form still shown | `OIDC_DISABLE_PASSWORD_LOGIN` only applies when `OIDC_ENABLED=true`; recreate container after env change |
 | Encryption / token errors with Authentik | Leave the provider **encryption key** empty; keep a signing key |
 

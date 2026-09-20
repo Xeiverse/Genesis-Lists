@@ -140,12 +140,25 @@ object OAuthDeepLink {
     const val SCHEME = "uk.co.xeiverse.genesislists"
     const val HOST = "oauth-callback"
 
+    const val CLEARTEXT_SECURE_COOKIE_HINT =
+        "This server sets Secure cookies (COOKIE_SECURE=true) but the app is using HTTP. Use an HTTPS URL, or set COOKIE_SECURE=false for local HTTP and recreate the container."
+
     fun oidcStartUrl(baseUrl: String): String =
         "${baseUrl.trimEnd('/')}/api/auth/oidc/start?client=android"
 
     /** Skip re-exchange when a session already exists (stale deep-link after recreation). */
     fun shouldExchangeOidcTicket(hasSession: Boolean, ticket: String?): Boolean =
         !ticket.isNullOrBlank() && !hasSession
+
+    fun oidcFailureMessage(baseUrl: String?): String =
+        if (baseUrlLooksHttp(baseUrl)) {
+            "OIDC sign-in failed. If this is a local HTTP server, COOKIE_SECURE must be false (recreate the container). On production, use the HTTPS origin in the app."
+        } else {
+            "OIDC sign-in failed"
+        }
+
+    fun baseUrlLooksHttp(baseUrl: String?): Boolean =
+        baseUrl?.trim()?.startsWith("http://", ignoreCase = true) == true
 
     fun parse(uriString: String): Result {
         // Avoid android.net.Uri so JVM unit tests can run without Robolectric.

@@ -37,7 +37,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 | GET | `/api/auth/registration` | No | `{ "open": true \| false }` — whether new password accounts can be created (also false when password login is disabled) |
 | POST | `/api/auth/register` | No | Create account + session `{ "email", "password", "name"? }`. `403 FORBIDDEN` when registration is closed or password login is disabled; `409 CONFLICT` when the email is already registered |
 | POST | `/api/auth/login` | No | Create session `{ "email", "password" }`. `403 FORBIDDEN` when password login is disabled |
-| GET | `/api/auth/oidc/start` | No | `302` to the IdP authorize URL. `404` when OIDC is disabled. Optional `?client=android` marks the login for the native companion (see mobile exchange) |
+| GET | `/api/auth/oidc/start` | No | Web: `302` to the IdP authorize URL. Android (`?client=android`): `200` HTML that navigates to the IdP so Custom Tabs persist `genesis_oidc_state`. `404` when OIDC is disabled |
 | GET | `/api/auth/oidc/callback` | No | Exchange code; set session cookie; `302` to `/` (web). When start used `client=android`, `302` to `/api/auth/oidc/android-handoff?ticket=...` (no session cookie in the browser). Errors redirect to `/login?error=oidc` or the handoff with `?error=oidc` |
 | GET | `/api/auth/oidc/android-handoff` | No | HTTPS bridge for Custom Tabs: HTML that navigates to `uk.co.xeiverse.genesislists://oauth-callback?...` (ticket or error). Does not set a session cookie |
 | POST | `/api/auth/oidc/mobile-exchange` | No | Body `{ "ticket" }`. Consumes a one-time Android OIDC ticket, sets `genesis_session`, returns the user DTO. `401` if the ticket is missing/used/expired. `404` when OIDC is disabled |

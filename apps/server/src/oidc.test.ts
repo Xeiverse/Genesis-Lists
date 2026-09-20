@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { extractOidcClaims, resolveOidcSettingsFromEnv } from "./oidc.js";
+import { extractOidcClaims, OidcLoginError, resolveOidcSettingsFromEnv } from "./oidc.js";
 
 const issuer = "https://idp.example.com/application/o/genesis";
 
@@ -97,7 +97,8 @@ describe("extractOidcClaims", () => {
             email: "alice@example.com",
             email_verified,
           }),
-        /email_verified/,
+        (err: unknown) =>
+          err instanceof OidcLoginError && err.reason === "email_unverified",
         `email_verified: ${JSON.stringify(email_verified)} must not be treated as verified`,
       );
     }

@@ -15,6 +15,7 @@ import {
   OIDC_STATE_TTL_MS,
   OIDC_MOBILE_TICKET_TTL_MS,
   ANDROID_OAUTH_CALLBACK_URI,
+  OidcLoginError,
   newOidcStateMaterials,
   type OidcClaims,
   type OidcProvider,
@@ -223,6 +224,32 @@ export async function registerAuth(
     return url.href;
   }
 
+  function androidOidcStartHtml(idpUrl: string) {
+    const escapedHref = idpUrl
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const escapedJs = idpUrl
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Continue sign-in</title>
+  <meta http-equiv="refresh" content="0;url=${escapedHref}"/>
+  <script>location.replace('${escapedJs}');</script>
+</head>
+<body>
+  <p><a href="${escapedHref}">Continue to sign-in</a></p>
+</body>
+</html>`;
+  }
+
   function androidHandoffHtml(deepLink: string) {
     const escapedHref = deepLink
       .replace(/&/g, "&amp;")
@@ -281,7 +308,7 @@ export async function registerAuth(
           existingIdentity.user_id,
         );
       } else if (holder !== existingIdentity.user_id) {
-        throw new Error("OIDC_EMAIL_TAKEN");
+        throw new OidcLoginError("email_taken", "OIDC_EMAIL_TAKEN");
       }
       return { userId: existingIdentity.user_id };
     }
@@ -298,7 +325,10 @@ export async function registerAuth(
     }
 
     if (!oidcSettings.autoRegister) {
-      throw new Error("OIDC_AUTO_REGISTER_DISABLED");
+      throw new OidcLoginError(
+        "auto_register_disabled",
+        "OIDC_AUTO_REGISTER_DISABLED",
+      );
     }
 
     const userId = uuid();
@@ -423,6 +453,15 @@ export async function registerAuth(
         nonce,
       });
       setOidcStateCookie(reply, state);
+      // Custom Tabs drop Set-Cookie on a 302 that immediately leaves the site
+      // (bounce tracking). A document response lets genesis_oidc_state stick
+      // before navigating to the IdP, so callback CSRF still binds the agent.
+      if (client === "android") {
+        return reply
+          .type("text/html; charset=utf-8")
+          .header("Cache-Control", "no-store")
+          .send(androidOidcStartHtml(url.href));
+      }
       return reply.redirect(url.href);
     } catch (err) {
       app.log.error?.(err);
@@ -473,18 +512,13 @@ export async function registerAuth(
     if (!state) {
       return failRedirect("missing_state");
     }
-    // Custom Tabs bounce through the IdP (Authentik) after a 302 from /oidc/start.
-    // Chrome drops the SameSite cookie set on that bounce, so Android cannot use
-    // the cookie as login-CSRF. The one-time `state` row is the binding instead.
-    if (!androidClient) {
-      if (!cookieState) {
-        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
-        return failRedirect("missing_state_cookie");
-      }
-      if (state !== cookieState) {
-        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
-        return failRedirect("state_cookie_mismatch");
-      }
+    if (!cookieState) {
+      db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      return failRedirect("missing_state_cookie");
+    }
+    if (state !== cookieState) {
+      db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      return failRedirect("state_cookie_mismatch");
     }
 
     const stored = db
@@ -539,16 +573,8 @@ export async function registerAuth(
       return reply.redirect("/");
     } catch (err) {
       app.log.error?.(err);
-      const message = err instanceof Error ? err.message : "unknown";
-      const lower = message.toLowerCase();
-      let reason = "exchange_or_user_failed";
-      if (lower.includes("email_verified")) reason = "email_unverified";
-      else if (lower.includes("missing") && lower.includes("email")) reason = "missing_email";
-      else if (lower.includes("not a valid email")) reason = "invalid_email";
-      else if (message.includes("OIDC_EMAIL_TAKEN")) reason = "email_taken";
-      else if (message.includes("OIDC_AUTO_REGISTER_DISABLED")) reason = "auto_register_disabled";
-      else if (lower.includes("missing sub")) reason = "missing_sub";
-      else if (lower.includes("id token")) reason = "missing_id_token";
+      const reason =
+        err instanceof OidcLoginError ? err.reason : "exchange_or_user_failed";
       return failRedirect(reason);
     }
   });

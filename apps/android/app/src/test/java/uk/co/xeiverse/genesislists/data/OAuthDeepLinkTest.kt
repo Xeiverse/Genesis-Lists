@@ -88,7 +88,13 @@ class OAuthDeepLinkTest {
             OAuthDeepLink.oidcFailureMessage(
                 "https://lists.example.com",
                 "email_unverified",
-            ).contains("email as verified"),
+            ).contains("mark your address as verified"),
+        )
+        assertTrue(
+            OAuthDeepLink.oidcFailureMessage(
+                "https://lists.example.com",
+                "auto_register_disabled",
+            ).contains("auto-registration is disabled"),
         )
     }
 }

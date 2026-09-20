@@ -153,9 +153,15 @@ object OAuthDeepLink {
     fun oidcFailureMessage(baseUrl: String?, reason: String? = null): String =
         when (reason) {
             "email_unverified" ->
-                "The identity provider did not mark your email as verified. Verify it in Authentik, or set OIDC_REQUIRE_EMAIL_VERIFIED=false if you trust this IdP."
+                "The identity provider did not mark your email as verified. Ask the person who runs Authentik to mark your address as verified, then try again."
+            "auto_register_disabled" ->
+                "No local account exists for this email, and auto-registration is disabled."
+            "email_taken" ->
+                "This identity is already linked to a different account."
+            "missing_email" ->
+                "The identity provider did not send an email address."
             else -> if (baseUrlLooksHttp(baseUrl)) {
-                "OIDC sign-in failed. If this is a local HTTP server, COOKIE_SECURE must be false (recreate the container). On production, use the HTTPS origin in the app."
+                "OIDC sign-in failed. If password login works but OAuth does not, check the Authentik email claim. If nothing signs in, a local HTTP server needs COOKIE_SECURE=false (session cookie), or use the HTTPS origin."
             } else {
                 "OIDC sign-in failed"
             }

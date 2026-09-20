@@ -64,7 +64,10 @@ OIDC_AUTO_REGISTER=true
 OIDC_AUTO_LAUNCH=false
 OIDC_EMAIL_CLAIM=email
 OIDC_NAME_CLAIM=name
-OIDC_REQUIRE_EMAIL_VERIFIED=false
+# Keep the default (true). If local Authentik users fail with
+# reason=email_unverified, verify the address in Authentik first.
+# Only then, and only for an IdP that cannot self-enroll arbitrary emails:
+# OIDC_REQUIRE_EMAIL_VERIFIED=false
 OIDC_DISABLE_PASSWORD_LOGIN=false
 ```
 
@@ -116,7 +119,7 @@ Genesis Lists refuses the login unless `email_verified` is absent or affirmative
 | Container exits; OIDC discovery error | Issuer URL, trailing slash, TLS/CA inside the container, proxy not returning HTML/login page for `.well-known` |
 | Redirect URI mismatch | Authentik Strict URI must equal `PUBLIC_BASE_URL` + `/api/auth/oidc/callback` (or `OIDC_REDIRECT_URI`) |
 | Login works at IdP then `/login?error=oidc` | Server logs; missing or invalid `email` claim; `email_verified` present and not affirmative (verify the address in Authentik, or set `OIDC_REQUIRE_EMAIL_VERIFIED=false`); `OIDC_AUTO_REGISTER=false` with no matching local user |
-| Android **OIDC sign-in failed** after Authentik | Same email-claim / `email_verified` causes as web. Custom Tabs also drop the OIDC state cookie; current servers bind Android by the one-time `state` row instead. On `http://`, COOKIE_SECURE must be false. |
+| Android **OIDC sign-in failed** after Authentik | Same email-claim / `email_verified` causes as web. Custom Tabs get an HTML interstitial from `/oidc/start` so `genesis_oidc_state` can persist; callback still requires that cookie. On `http://`, COOKIE_SECURE must be false for the session cookie after ticket exchange. |
 | Password form still shown | `OIDC_DISABLE_PASSWORD_LOGIN` only applies when `OIDC_ENABLED=true`; recreate container after env change |
 | Encryption / token errors with Authentik | Leave the provider **encryption key** empty; keep a signing key |
 

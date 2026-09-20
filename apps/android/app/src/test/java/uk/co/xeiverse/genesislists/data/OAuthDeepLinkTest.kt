@@ -51,9 +51,11 @@ class OAuthDeepLinkTest {
 
     @Test
     fun oidcFailureMessage_httpUrlHintsCookieSecure() {
-        val message = OAuthDeepLink.oidcFailureMessage("http://192.168.68.63")
+        val message = OAuthDeepLink.oidcFailureMessage("http://192.168.1.10")
         assertTrue(message.startsWith("OIDC sign-in failed."))
         assertTrue(message.contains("COOKIE_SECURE"))
+        assertTrue(message.contains("HTTPS origin"))
+        assertFalse(message.contains("This server sets Secure cookies"))
         assertEquals(
             "OIDC sign-in failed",
             OAuthDeepLink.oidcFailureMessage("https://lists.example.com"),

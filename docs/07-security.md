@@ -27,7 +27,7 @@ See [ADR 0005](adr/0005-oidc.md) and [guides/oauth-authentik.md](guides/oauth-au
 ## Android companion
 
 - Session cookie stored in EncryptedSharedPreferences via OkHttp `CookieJar` (same `genesis_session` as web). Backup is disabled on the app.
-- Android OIDC uses Custom Tabs + a one-time server ticket (`oidc_mobile_tickets`, short TTL). The HTTPS handoff page does **not** set a session cookie; only `POST /api/auth/oidc/mobile-exchange` does, into the app jar. Deep-link intent data is cleared after parse; a consumed ticket is not re-exchanged when a session already exists.
+- Android OIDC uses Custom Tabs + a one-time server ticket (`oidc_mobile_tickets`, short TTL). The HTTPS handoff page does **not** set a session cookie; only `POST /api/auth/oidc/mobile-exchange` sets one, into the app jar. Deep-link intent data is cleared after parse; a consumed ticket is not re-exchanged when a **sendable** session already exists. A `Secure` cookie that cannot be sent on the configured `http://` URL is treated as no session (and cleared after password/register/ticket-exchange detect the mismatch), so a later OIDC retry still exchanges the ticket.
 - Cleartext HTTP is rejected unless the host is private LAN / localhost / emulator / `.local` (`ServerUrlPolicy`). Network Security Config remains permissive because CIDRs cannot be expressed in XML.
 - Custom proxy headers (encrypted prefs) survive logout and server URL changes; session cookies and Room cache do not survive a URL change.
 

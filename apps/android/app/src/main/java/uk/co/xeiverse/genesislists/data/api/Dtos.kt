@@ -152,7 +152,7 @@ object OAuthDeepLink {
 
     fun oidcFailureMessage(baseUrl: String?): String =
         if (baseUrlLooksHttp(baseUrl)) {
-            "OIDC sign-in failed. $CLEARTEXT_SECURE_COOKIE_HINT"
+            "OIDC sign-in failed. If this is a local HTTP server, COOKIE_SECURE must be false (recreate the container). On production, use the HTTPS origin in the app."
         } else {
             "OIDC sign-in failed"
         }

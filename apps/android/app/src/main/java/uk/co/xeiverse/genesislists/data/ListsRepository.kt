@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 class OfflineMutationException(
@@ -254,14 +255,23 @@ class ListsRepository(
         if (!isOnline()) throw OfflineMutationException()
     }
 
-    fun hasSession(): Boolean = cookieJar.hasSessionCookie()
+    fun hasSession(): Boolean {
+        val url = sessionUrl()
+        if (url != null && cookieJar.sessionCookieBlockedOnCleartext(url)) return false
+        return cookieJar.hasSessionCookie()
+    }
 
     private fun requireUsableSessionCookie() {
-        val base = settings.baseUrl ?: return
-        val url = runCatching { "${base.trimEnd('/')}/".toHttpUrl() }.getOrNull() ?: return
+        val url = sessionUrl() ?: return
         if (cookieJar.sessionCookieBlockedOnCleartext(url)) {
+            cookieJar.clear()
             throw ApiException(0, "COOKIE_SECURE_HTTP", OAuthDeepLink.CLEARTEXT_SECURE_COOKIE_HINT)
         }
+    }
+
+    private fun sessionUrl(): HttpUrl? {
+        val base = settings.baseUrl ?: return null
+        return runCatching { "${base.trimEnd('/')}/".toHttpUrl() }.getOrNull()
     }
 
     companion object {

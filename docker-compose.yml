@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/xeiverse/genesis-lists:${GENESIS_LISTS_VERSION:-0.3.0}
+    image: ghcr.io/xeiverse/genesis-lists:${GENESIS_LISTS_VERSION:-0.3.1}
     build: .
     # missing: use a local image if present; `docker compose pull` upgrades a published tag.
     # Before the tag exists on GHCR, start with `docker compose up -d --build`.
@@ -14,7 +14,7 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
       DIRECTORY_SHOW_EMAILS: ${DIRECTORY_SHOW_EMAILS:-true}
-      APP_VERSION: ${GENESIS_LISTS_VERSION:-0.3.0}
+      APP_VERSION: ${GENESIS_LISTS_VERSION:-0.3.1}
       NODE_ENV: production
       PORT: 3000
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}

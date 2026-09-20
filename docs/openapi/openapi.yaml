@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Genesis Lists API
-  version: 0.3.0
+  version: 0.3.1
   description: |
     REST API for Genesis Lists. Session cookie authentication with optional OIDC.
     Includes shared lists (members). Spec is the source of truth — see docs/04-api.md.
@@ -22,7 +22,7 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
               example:
                 status: ok
-                version: "0.3.0"
+                version: "0.3.1"
                 schemaVersion: 5
         '503':
           description: Database unavailable
@@ -32,7 +32,7 @@ paths:
                 $ref: '#/components/schemas/HealthErrorResponse'
               example:
                 status: error
-                version: "0.3.0"
+                version: "0.3.1"
 
   /api/auth/registration:
     get:
@@ -732,7 +732,7 @@ components:
           enum: [ok]
         version:
           type: string
-          example: "0.3.0"
+          example: "0.3.1"
         schemaVersion:
           type: integer
           minimum: 1

@@ -1,5 +1,7 @@
 import type {
+  ApiTokenDto,
   AuthConfigDto,
+  CreatedApiTokenDto,
   ListDto,
   ListItemDto,
   ListMemberDto,
@@ -74,6 +76,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
+  tokens: () => request<{ tokens: ApiTokenDto[] }>("/api/auth/tokens"),
+  createToken: (name: string) =>
+    request<CreatedApiTokenDto>("/api/auth/tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  deleteToken: (id: string) =>
+    request<void>(`/api/auth/tokens/${id}`, { method: "DELETE" }),
   users: () => request<{ users: UserDirectoryDto[] }>("/api/users"),
   lists: () => request<{ lists: ListDto[] }>("/api/lists"),
   createList: (name: string) =>

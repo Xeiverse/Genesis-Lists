@@ -8,6 +8,7 @@
 - Cookie is signed with `SESSION_SECRET`. `Secure` flag on when HTTPS / `COOKIE_SECURE=true`; `SameSite=Lax`.
 - Logout deletes the server-side session row and clears the cookie. It does **not** call the IdP end-session endpoint in this release.
 - Changing a password deletes every other session for that user. The session that submitted the change stays signed in so Settings does not kick you out. Users without a password cannot use change-password.
+- **Personal access tokens:** long-lived Bearer credentials for list/item APIs (scripts, voice assistants). Created and revoked only with a session cookie (`POST/GET/DELETE /api/auth/tokens`). The server stores a SHA-256 hash only; plaintext (`gls_…`) is returned once. A PAT authenticates as the owning user with the same list authorization rules. A PAT cannot create, list, or revoke tokens.
 
 ## OIDC
 
@@ -40,9 +41,10 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 - List/item operations require the authenticated user to be the **owner** or a **member** (`list_members`).
 - **Owner-only** capabilities: delete list, get/put members.
 - **Member** capabilities: read/write items, rename, leave list (`DELETE .../members/me`).
-- Fail closed: missing/invalid session → `401`.
+- Fail closed: missing/invalid session or Bearer token → `401`.
 - No access (not owner, not member) → `404` (no existence leak).
 - Access without capability (e.g. member deletes list) → `403 FORBIDDEN`.
+- Token management (`/api/auth/tokens*`) requires a session cookie even if a Bearer header is present.
 
 ## User directory
 
@@ -58,6 +60,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 |--------|------------|
 | Password theft at rest | argon2id |
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
+| Stolen PAT | Hash-at-rest; revoke via Settings; PAT cannot mint further tokens |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
 | OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser (web 302 start; Android HTML interstitial so Custom Tabs persist the cookie); one-time server-side state rows |
 | Android OIDC ticket replay | One-time `oidc_mobile_tickets` row deleted on exchange; short TTL; no session cookie on handoff HTML |

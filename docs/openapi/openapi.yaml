@@ -3,7 +3,8 @@ info:
   title: Genesis Lists API
   version: 0.3.1
   description: |
-    REST API for Genesis Lists. Session cookie authentication with optional OIDC.
+    REST API for Genesis Lists. Session cookie authentication with optional OIDC,
+    plus personal access tokens (`Authorization: Bearer`) for list/item APIs.
     Includes shared lists (members). Spec is the source of truth — see docs/04-api.md.
 servers:
   - url: /
@@ -23,7 +24,7 @@ paths:
               example:
                 status: ok
                 version: "0.3.1"
-                schemaVersion: 5
+                schemaVersion: 6
         '503':
           description: Database unavailable
           content:
@@ -382,6 +383,86 @@ paths:
         '403':
           $ref: '#/components/responses/ForbiddenError'
 
+  /api/auth/tokens:
+    get:
+      operationId: listApiTokens
+      summary: List personal access tokens for the current user
+      description: >
+        Returns metadata only (no secrets). Requires a signed-in session cookie;
+        a Bearer token cannot list tokens.
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tokens]
+                properties:
+                  tokens:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiToken'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      operationId: createApiToken
+      summary: Create a personal access token
+      description: |
+        Creates a long-lived API token. The plaintext `token` is returned **once**
+        in this response and is never stored or shown again. Requires a session
+        cookie; Bearer auth cannot create tokens.
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiTokenRequest'
+            example:
+              name: Genesis voice
+      responses:
+        '201':
+          description: Created (includes plaintext token once)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedApiToken'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/auth/tokens/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: deleteApiToken
+      summary: Revoke a personal access token
+      description: >
+        Deletes the token. Requires a session cookie. Returns 404 if the token
+        is missing or belongs to another user.
+      tags: [Auth]
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Revoked
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /api/users:
     get:
       operationId: listUsers
@@ -416,9 +497,11 @@ paths:
       summary: List lists owned by or shared with the current user
       description: >
         Each list includes itemCount, up to 8 previewItems (by position), isOwner, and ownerName.
+        Accepts a session cookie or `Authorization: Bearer` personal access token.
       tags: [Lists]
       security:
         - sessionCookie: []
+        - bearerAuth: []
       responses:
         '200':
           description: OK
@@ -440,6 +523,7 @@ paths:
       tags: [Lists]
       security:
         - sessionCookie: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -714,6 +798,13 @@ components:
       type: apiKey
       in: cookie
       name: genesis_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: gls_
+      description: >
+        Personal access token created via POST /api/auth/tokens (session required).
+        Prefix is `gls_`. Same authorization as the owning user on list/item routes.
 
   parameters:
     ListId:
@@ -745,7 +836,7 @@ components:
         schemaVersion:
           type: integer
           minimum: 1
-          example: 5
+          example: 6
 
     HealthErrorResponse:
       type: object
@@ -866,6 +957,46 @@ components:
           type: string
           minLength: 8
           maxLength: 128
+
+    CreateApiTokenRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Label for the token (not a secret)
+
+    ApiToken:
+      type: object
+      required: [id, name, createdAt, lastUsedAt]
+      description: Metadata for a personal access token (no secret)
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreatedApiToken:
+      allOf:
+        - $ref: '#/components/schemas/ApiToken'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: >
+                Plaintext token shown once on create. Prefix `gls_`. Store it;
+                it cannot be retrieved again.
 
     User:
       type: object

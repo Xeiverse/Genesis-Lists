@@ -80,7 +80,7 @@ describe("Genesis Lists API contract", async () => {
     assert.deepEqual(res.json(), {
       status: "ok",
       version: "1.0.0",
-      schemaVersion: 5,
+      schemaVersion: 6,
     });
   });
 
@@ -1675,6 +1675,194 @@ describe("shared lists", async () => {
     });
     assert.equal(clearAll.statusCode, 200);
     assert.equal(clearAll.json().members.length, 0);
+  });
+});
+
+describe("personal access tokens (Bearer)", async () => {
+  let app: FastifyInstance;
+  let dbPath: string;
+  let cookie = "";
+  let listId = "";
+
+  before(async () => {
+    dbPath = path.join(os.tmpdir(), `genesis-pat-${Date.now()}.db`);
+    app = await buildApp({
+      databasePath: dbPath,
+      sessionSecret: "test-secret",
+      cookieSecure: false,
+      registrationMode: "open",
+      version: "1.0.0",
+    });
+    await app.ready();
+
+    const reg = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "pat@example.com", password: "password1" },
+    });
+    cookie = getCookie(reg)!;
+
+    const list = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      headers: { cookie },
+      payload: { name: "Groceries" },
+    });
+    listId = list.json().id;
+  });
+
+  after(async () => {
+    await app.close();
+    for (const suffix of ["", "-wal", "-shm"]) {
+      const p = dbPath + suffix;
+      try {
+        if (fs.existsSync(p)) fs.unlinkSync(p);
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  await it("token CRUD requires a session cookie (not Bearer)", async () => {
+    const unauth = await app.inject({
+      method: "GET",
+      url: "/api/auth/tokens",
+    });
+    assert.equal(unauth.statusCode, 401);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Genesis" },
+    });
+    assert.equal(created.statusCode, 201);
+    const body = created.json();
+    assert.equal(body.name, "Genesis");
+    assert.ok(body.id);
+    assert.ok(typeof body.token === "string" && body.token.startsWith("gls_"));
+    assert.equal(body.lastUsedAt, null);
+    const plaintext = body.token as string;
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+    });
+    assert.equal(listed.statusCode, 200);
+    assert.equal(listed.json().tokens.length, 1);
+    assert.equal(listed.json().tokens[0].id, body.id);
+    assert.equal(listed.json().tokens[0].token, undefined);
+
+    const viaBearer = await app.inject({
+      method: "GET",
+      url: "/api/auth/tokens",
+      headers: { authorization: `Bearer ${plaintext}` },
+    });
+    assert.equal(viaBearer.statusCode, 401);
+
+    const createViaBearer = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { authorization: `Bearer ${plaintext}` },
+      payload: { name: "Another" },
+    });
+    assert.equal(createViaBearer.statusCode, 401);
+  });
+
+  await it("Bearer auth works on list/item routes with the same authz as the owner", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "API" },
+    });
+    const token = created.json().token as string;
+
+    const lists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(lists.statusCode, 200);
+    assert.equal(lists.json().lists.length, 1);
+    assert.equal(lists.json().lists[0].id, listId);
+
+    const item = await app.inject({
+      method: "POST",
+      url: `/api/lists/${listId}/items`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { text: "Milk" },
+    });
+    assert.equal(item.statusCode, 201);
+    assert.equal(item.json().text, "Milk");
+
+    const items = await app.inject({
+      method: "GET",
+      url: `/api/lists/${listId}/items`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(items.statusCode, 200);
+    assert.equal(items.json().items.length, 1);
+
+    const meta = await app.inject({
+      method: "GET",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+    });
+    const row = (meta.json().tokens as Array<{ name: string; lastUsedAt: string | null }>).find(
+      (t) => t.name === "API",
+    );
+    assert.ok(row?.lastUsedAt);
+
+    const bad = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { authorization: "Bearer gls_not-a-real-token" },
+    });
+    assert.equal(bad.statusCode, 401);
+  });
+
+  await it("DELETE revokes a token", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Revoke me" },
+    });
+    const { id, token } = created.json() as { id: string; token: string };
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/auth/tokens/${id}`,
+      headers: { cookie },
+    });
+    assert.equal(del.statusCode, 204);
+
+    const lists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(lists.statusCode, 401);
+
+    const missing = await app.inject({
+      method: "DELETE",
+      url: `/api/auth/tokens/${id}`,
+      headers: { cookie },
+    });
+    assert.equal(missing.statusCode, 404);
+  });
+
+  await it("invalid create body is 400", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "" },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.json().error.code, "VALIDATION_ERROR");
   });
 });
 

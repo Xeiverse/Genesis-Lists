@@ -7,6 +7,7 @@ erDiagram
   users ||--o{ lists : owns
   users ||--o{ user_identities : links
   users ||--o{ list_members : "is member"
+  users ||--o{ api_tokens : issues
   lists ||--o{ list_members : "shared with"
   lists ||--o{ list_items : contains
   users {
@@ -22,6 +23,14 @@ erDiagram
     text issuer
     text subject
     datetime created_at
+  }
+  api_tokens {
+    text id PK
+    text user_id FK
+    text name
+    text token_hash UK
+    datetime created_at
+    datetime last_used_at "nullable"
   }
   lists {
     text id PK
@@ -72,6 +81,19 @@ erDiagram
 | `created_at` | text | NOT NULL | UTC |
 
 Unique constraint on `(issuer, subject)`.
+
+### `api_tokens`
+
+| Column | Type | Constraints | Notes |
+|--------|------|-------------|-------|
+| `id` | text | PK | UUID |
+| `user_id` | text | FK → users.id, NOT NULL, ON DELETE CASCADE | Owning account |
+| `name` | text | NOT NULL | Label (1–64 chars); not a secret |
+| `token_hash` | text | UNIQUE, NOT NULL | SHA-256 hex of the plaintext token; plaintext never stored |
+| `created_at` | text | NOT NULL | UTC |
+| `last_used_at` | text | NULL | UTC; updated on successful Bearer auth |
+
+Plaintext tokens use the prefix `gls_` and are returned **once** from `POST /api/auth/tokens`. Index `user_id` for listing; unique index on `token_hash` for lookup.
 
 ### `lists`
 
@@ -131,7 +153,7 @@ Sessions live in a `sessions` table (id, user_id, expires_at, created_at) with t
 
 Short-lived OIDC login state (PKCE verifier, nonce, expiry) is stored server-side in `oidc_login_states` and is not part of the public API model.
 
-Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`. Schema version **4** replaces `username` with a unique `email` and adds `name` ([ADR 0006](adr/0006-email-login-identifier.md)). Schema version **5** adds `oidc_login_states.client` and `oidc_mobile_tickets` for Android OIDC ticket exchange ([ADR 0007](adr/0007-android-companion.md)).
+Applied schema versions are stored in `schema_migrations(version, applied_at)`. See [ADR 0003](adr/0003-sqlite-default.md). That table is not part of the public API. Schema version **2** adds `list_members`. Schema version **3** adds nullable `password_hash`, `email`, `user_identities`, and `oidc_login_states`. Schema version **4** replaces `username` with a unique `email` and adds `name` ([ADR 0006](adr/0006-email-login-identifier.md)). Schema version **5** adds `oidc_login_states.client` and `oidc_mobile_tickets` for Android OIDC ticket exchange ([ADR 0007](adr/0007-android-companion.md)). Schema version **6** adds `api_tokens` for Bearer personal access tokens.
 
 ### Schema version 4 is destructive
 

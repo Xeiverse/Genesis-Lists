@@ -8,11 +8,12 @@ All endpoints are under `/api`.
 
 ## Authentication
 
-- **Mechanism:** HTTP-only session cookie (`genesis_session` unless configured otherwise). The cookie is **signed** with `SESSION_SECRET`, `SameSite=Lax`, and `Secure` when `COOKIE_SECURE=true` (or production default). The cookie value is a random session id stored in SQLite.
+- **Session cookie:** HTTP-only session cookie (`genesis_session` unless configured otherwise). The cookie is **signed** with `SESSION_SECRET`, `SameSite=Lax`, and `Secure` when `COOKIE_SECURE=true` (or production default). The cookie value is a random session id stored in SQLite.
 - **Register / login** set the cookie on success (when password login is enabled).
 - **OIDC callback** sets the same cookie after a successful IdP login.
 - **Logout** clears the cookie and deletes the server-side session (local only).
-- Protected routes require a valid session; otherwise `401` with error code `UNAUTHORIZED`.
+- **Personal access tokens (Bearer):** create via `POST /api/auth/tokens` while signed in (Settings UI or curl). The plaintext token (`gls_…`) is returned **once**. Send `Authorization: Bearer <token>` on list/item routes. The server stores only a SHA-256 hash. Token management endpoints require a session cookie (a PAT cannot mint or revoke PATs).
+- Protected routes require a valid session **or** (for list/item APIs) a valid Bearer token; otherwise `401` with error code `UNAUTHORIZED`.
 
 ## Error shape
 
@@ -44,7 +45,10 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/auth/me` | Yes | Current user `{ id, email, name, authProviders }` |
 | PATCH | `/api/auth/me` | Yes | Update display name `{ "name": "..." }`; returns the updated user. The email cannot be changed |
-| POST | `/api/auth/change-password` | Yes | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions; current session stays. `403` if the user has no password |
+| POST | `/api/auth/change-password` | Yes (session) | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions; current session stays. `403` if the user has no password |
+| GET | `/api/auth/tokens` | Yes (session) | List personal access tokens for the current user (metadata only; no secrets) |
+| POST | `/api/auth/tokens` | Yes (session) | Create a PAT `{ "name": "..." }`. Response includes plaintext `token` **once** (`gls_…`) |
+| DELETE | `/api/auth/tokens/{id}` | Yes (session) | Revoke a PAT. `404` if missing or not owned |
 
 ### Users
 
@@ -56,34 +60,56 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists` | Yes | Lists owned by or shared with the current user (includes `previewItems` up to 8, `itemCount`, `isOwner`, `ownerName`) |
-| POST | `/api/lists` | Yes | Create list `{ "name": "..." }` (`isOwner: true`) |
-| PATCH | `/api/lists/{id}` | Yes | Rename `{ "name": "..." }` — owner or member |
-| DELETE | `/api/lists/{id}` | Yes | Delete list + items — **owner only**; member → `403` |
+| GET | `/api/lists` | Yes (session or Bearer) | Lists owned by or shared with the current user (includes `previewItems` up to 8, `itemCount`, `isOwner`, `ownerName`) |
+| POST | `/api/lists` | Yes (session or Bearer) | Create list `{ "name": "..." }` (`isOwner: true`) |
+| PATCH | `/api/lists/{id}` | Yes (session or Bearer) | Rename `{ "name": "..." }` — owner or member |
+| DELETE | `/api/lists/{id}` | Yes (session or Bearer) | Delete list + items — **owner only**; member → `403` |
 
 ### Members
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists/{id}/members` | Yes | Current members `{ userId, name }[]` — **owner only**; member → `403` |
-| PUT | `/api/lists/{id}/members` | Yes | Replace member set `{ "userIds": ["..."] }` — **owner only**. Rejects owner id or unknown ids (`400`). Empty array clears all members |
-| DELETE | `/api/lists/{id}/members/me` | Yes | Leave list — **member only**; owner → `400`; non-member / no access → `404` |
+| GET | `/api/lists/{id}/members` | Yes (session or Bearer) | Current members `{ userId, name }[]` — **owner only**; member → `403` |
+| PUT | `/api/lists/{id}/members` | Yes (session or Bearer) | Replace member set `{ "userIds": ["..."] }` — **owner only**. Rejects owner id or unknown ids (`400`). Empty array clears all members |
+| DELETE | `/api/lists/{id}/members/me` | Yes (session or Bearer) | Leave list — **member only**; owner → `400`; non-member / no access → `404` |
 
 ### Items
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/lists/{id}/items` | Yes | Items for a list (ordered by `position`) — owner or member |
-| POST | `/api/lists/{id}/items` | Yes | Add item `{ "text": "..." }` — owner or member |
-| PATCH | `/api/items/{id}` | Yes | Update `{ "text"?, "checked"?, "position"? }` — access via parent list |
-| DELETE | `/api/items/{id}` | Yes | Delete item — access via parent list |
-| DELETE | `/api/lists/{id}/items/checked` | Yes | Delete every ticked item on a list. `204` when accessible, including when nothing is ticked (idempotent). No body. `404` if the list is missing or not accessible |
+| GET | `/api/lists/{id}/items` | Yes (session or Bearer) | Items for a list (ordered by `position`) — owner or member |
+| POST | `/api/lists/{id}/items` | Yes (session or Bearer) | Add item `{ "text": "..." }` — owner or member |
+| PATCH | `/api/items/{id}` | Yes (session or Bearer) | Update `{ "text"?, "checked"?, "position"? }` — access via parent list |
+| DELETE | `/api/items/{id}` | Yes (session or Bearer) | Delete item — access via parent list |
+| DELETE | `/api/lists/{id}/items/checked` | Yes (session or Bearer) | Delete every ticked item on a list. `204` when accessible, including when nothing is ticked (idempotent). No body. `404` if the list is missing or not accessible |
 
 ### Health
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/health` | No | `{ "status": "ok", "version", "schemaVersion" }` after a successful database check. `503` `{ "status": "error", "version" }` if the database cannot be queried |
+
+## Creating a token (curl)
+
+While signed in (browser cookie jar or after login):
+
+```bash
+# Log in and save the session cookie
+curl -c cookies.txt -X POST http://localhost:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"your-password"}'
+
+# Create a token (plaintext returned once)
+curl -b cookies.txt -X POST http://localhost:3000/api/auth/tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Genesis voice"}'
+# → { "id": "...", "name": "Genesis voice", "token": "gls_...", "createdAt": "...", "lastUsedAt": null }
+
+# Call list APIs with Bearer
+curl -H "Authorization: Bearer gls_..." http://localhost:3000/api/lists
+```
+
+Or create/revoke tokens in **Settings → API tokens** in the web UI.
 
 ## Conventions
 
@@ -94,3 +120,4 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 - `authProviders` is an array of `"local"` and/or `"oidc"` indicating how the account can authenticate.
 - Accounts are identified by **email**, normalized to lower case. `name` is a non-unique display label and is the only user field other accounts can see.
 - No access → `404`. Access without capability → `403`.
+- Personal access tokens are stored as SHA-256 hashes; the plaintext prefix is `gls_`.

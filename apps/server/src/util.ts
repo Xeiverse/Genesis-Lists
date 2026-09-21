@@ -76,9 +76,13 @@ export function resolveSessionSecret(opts: {
 
 export type AuthUser = { id: string; email: string; name: string };
 
+/** How the request was authenticated (session cookie vs Bearer PAT). */
+export type AuthMethod = "session" | "bearer";
+
 declare module "fastify" {
   interface FastifyRequest {
     user?: AuthUser;
+    authMethod?: AuthMethod;
   }
 }
 

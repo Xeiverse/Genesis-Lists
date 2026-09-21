@@ -18,6 +18,7 @@ The application icon is Material Symbols Receipt Long on the primary green tile.
 - Multi-user accounts with isolated private data
 - Registration closes after the first account unless you leave it open
 - Change password from Settings (other sessions are signed out)
+- Personal access tokens (Bearer) for list/item APIs — create in Settings or via curl
 - Material Design 3 responsive web UI
 - Native Android companion (Kotlin / Compose) for self-hosted servers
 - Docker self-hosting with SQLite

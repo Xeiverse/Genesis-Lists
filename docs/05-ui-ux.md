@@ -90,6 +90,7 @@ In the UI, a shared mark (MUI `ReceiptLong` on the same green tile) appears only
 - App bar: back, “Settings”.
 - Show the signed-in display name, email, and auth providers (`local` / `oidc`).
 - Display name field with a Save action calling `PATCH /api/auth/me`; success and error feedback inline. Copy notes that this is the name other people see.
+- **API tokens:** create/list/revoke personal access tokens (`POST/GET/DELETE /api/auth/tokens`). Show the plaintext token **once** after create (copy control). List metadata (name, created, last used) with revoke. Session cookie only — not usable via Bearer.
 - Change password form (current, new, confirm) only when `authProviders` includes `local`; success feedback (other sessions are signed out); inline errors for mismatch / API failures.
 - OIDC-only accounts see a short note that password change is unavailable.
 - Route: `/settings` (auth required).

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Personal access tokens (Bearer) for list/item APIs: create/list/revoke via session (`/api/auth/tokens`), Settings UI, schema version 6 (`api_tokens` stores hash only)
+
 ## 0.3.1
 
 ### Android GitHub Release APK

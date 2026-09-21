@@ -150,11 +150,21 @@ object OAuthDeepLink {
     fun shouldExchangeOidcTicket(hasSession: Boolean, ticket: String?): Boolean =
         !ticket.isNullOrBlank() && !hasSession
 
-    fun oidcFailureMessage(baseUrl: String?): String =
-        if (baseUrlLooksHttp(baseUrl)) {
-            "OIDC sign-in failed. If this is a local HTTP server, COOKIE_SECURE must be false (recreate the container). On production, use the HTTPS origin in the app."
-        } else {
-            "OIDC sign-in failed"
+    fun oidcFailureMessage(baseUrl: String?, reason: String? = null): String =
+        when (reason) {
+            "email_unverified" ->
+                "The identity provider did not mark your email as verified. Ask the person who runs Authentik to mark your address as verified, then try again."
+            "auto_register_disabled" ->
+                "No local account exists for this email, and auto-registration is disabled."
+            "email_taken" ->
+                "This identity is already linked to a different account."
+            "missing_email" ->
+                "The identity provider did not send an email address."
+            else -> if (baseUrlLooksHttp(baseUrl)) {
+                "OIDC sign-in failed. If password login works but OAuth does not, check the Authentik email claim. If nothing signs in, a local HTTP server needs COOKIE_SECURE=false (session cookie), or use the HTTPS origin."
+            } else {
+                "OIDC sign-in failed"
+            }
         }
 
     fun baseUrlLooksHttp(baseUrl: String?): Boolean =
@@ -186,19 +196,20 @@ object OAuthDeepLink {
             }
             .toMap()
         val error = params["error"]
+        val reason = params["reason"]?.takeIf { it.isNotBlank() }
         if (!error.isNullOrBlank()) {
-            return Result.Error(error)
+            return Result.Error(error, reason)
         }
         val ticket = params["ticket"]
         if (!ticket.isNullOrBlank()) {
             return Result.Ticket(ticket)
         }
-        return Result.Error("oidc")
+        return Result.Error("oidc", reason ?: "missing_ticket")
     }
 
     sealed class Result {
         data object Ignored : Result()
         data class Ticket(val ticket: String) : Result()
-        data class Error(val code: String) : Result()
+        data class Error(val code: String, val reason: String? = null) : Result()
     }
 }

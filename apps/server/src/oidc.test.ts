@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { extractOidcClaims, resolveOidcSettingsFromEnv } from "./oidc.js";
+import { extractOidcClaims, OidcLoginError, resolveOidcSettingsFromEnv } from "./oidc.js";
 
 const issuer = "https://idp.example.com/application/o/genesis";
 
@@ -17,6 +17,14 @@ describe("resolveOidcSettingsFromEnv", () => {
     const resolved = resolveOidcSettingsFromEnv({} as NodeJS.ProcessEnv);
     assert.equal(resolved.emailClaim, "email");
     assert.equal(resolved.nameClaim, "name");
+    assert.equal(resolved.requireEmailVerified, true);
+  });
+
+  it("allows requireEmailVerified to be disabled", () => {
+    const resolved = resolveOidcSettingsFromEnv({
+      OIDC_REQUIRE_EMAIL_VERIFIED: "false",
+    } as NodeJS.ProcessEnv);
+    assert.equal(resolved.requireEmailVerified, false);
   });
 
   it("allows the claim names to be overridden", () => {
@@ -89,7 +97,8 @@ describe("extractOidcClaims", () => {
             email: "alice@example.com",
             email_verified,
           }),
-        /email_verified/,
+        (err: unknown) =>
+          err instanceof OidcLoginError && err.reason === "email_unverified",
         `email_verified: ${JSON.stringify(email_verified)} must not be treated as verified`,
       );
     }
@@ -111,6 +120,19 @@ describe("extractOidcClaims", () => {
       sub: "sub-1",
       email: "alice@example.com",
     });
+    assert.equal(claims.email, "alice@example.com");
+  });
+
+  it("accepts an unverified email when requireEmailVerified is false", () => {
+    const claims = extractOidcClaims(
+      settings({ requireEmailVerified: false }),
+      issuer,
+      {
+        sub: "sub-1",
+        email: "alice@example.com",
+        email_verified: false,
+      },
+    );
     assert.equal(claims.email, "alice@example.com");
   });
 

@@ -63,8 +63,8 @@ If `GET /api/auth/config` fails, Auth shows an error and **Retry** — it does n
 
 Flow:
 
-1. App opens `{baseUrl}/api/auth/oidc/start?client=android` in a Chrome Custom Tab.
-2. IdP redirects to the **web** callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`) — no extra IdP redirect URI for mobile.
+1. App opens `{baseUrl}/api/auth/oidc/start?client=android` in a Chrome Custom Tab. The server returns HTML that navigates to the IdP so `genesis_oidc_state` can persist (a 302 bounce is dropped by Chrome).
+2. IdP redirects to the **web** callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`) — no extra IdP redirect URI for mobile. The callback still requires the state cookie, same as web.
 3. Server redirects Custom Tabs to HTTPS `{baseUrl}/api/auth/oidc/android-handoff?ticket=...` (HTML auto-opens the app scheme; no session cookie in the browser).
 4. Deep link `uk.co.xeiverse.genesislists://oauth-callback?ticket=...` reaches the app; the intent URI is cleared after parse. The app exchanges via `POST /api/auth/oidc/mobile-exchange` and stores `genesis_session` in the cookie jar. If a session already exists (e.g. activity recreation with a stale deep link), exchange is skipped.
 

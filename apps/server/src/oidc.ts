@@ -18,6 +18,7 @@ export type OidcSettings = {
   emailClaim: string;
   nameClaim: string;
   disablePasswordLogin: boolean;
+  requireEmailVerified: boolean;
   redirectUri: string;
 };
 
@@ -27,6 +28,17 @@ export type OidcClaims = {
   email: string;
   name: string;
 };
+
+/** Stable callback `reason` values; do not parse English error text. */
+export class OidcLoginError extends Error {
+  constructor(
+    readonly reason: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "OidcLoginError";
+  }
+}
 
 export type OidcProvider = {
   settings: OidcSettings;
@@ -91,6 +103,7 @@ export function resolveOidcSettingsFromEnv(env: NodeJS.ProcessEnv): OidcSettings
     emailClaim: env.OIDC_EMAIL_CLAIM?.trim() || "email",
     nameClaim: env.OIDC_NAME_CLAIM?.trim() || "name",
     disablePasswordLogin: enabled && envFlag(env.OIDC_DISABLE_PASSWORD_LOGIN, false),
+    requireEmailVerified: envFlag(env.OIDC_REQUIRE_EMAIL_VERIFIED, true),
     redirectUri,
   };
 }
@@ -121,24 +134,33 @@ export function extractOidcClaims(
 ): OidcClaims {
   const subject = claimString(claims, "sub");
   if (!subject) {
-    throw new Error("OIDC token is missing sub claim");
+    throw new OidcLoginError("missing_sub", "OIDC token is missing sub claim");
   }
 
   // An IdP that lets users set an unverified address could otherwise claim
   // someone else's account (07-security.md). An absent claim is accepted
-  // because not every IdP emits it.
-  if (!emailIsVerified(claims.email_verified)) {
-    throw new Error("OIDC token does not assert email_verified");
+  // because not every IdP emits it. Private IdPs such as Authentik often
+  // emit email_verified=false for local users; operators can disable this
+  // with OIDC_REQUIRE_EMAIL_VERIFIED=false only when they control enrollment.
+  if (settings.requireEmailVerified && !emailIsVerified(claims.email_verified)) {
+    throw new OidcLoginError(
+      "email_unverified",
+      "OIDC token does not assert email_verified",
+    );
   }
 
   const emailRaw = claimString(claims, settings.emailClaim);
   if (!emailRaw) {
-    throw new Error(`OIDC token is missing ${settings.emailClaim} claim`);
+    throw new OidcLoginError(
+      "missing_email",
+      `OIDC token is missing ${settings.emailClaim} claim`,
+    );
   }
 
   const parsedEmail = emailSchema.safeParse(emailRaw);
   if (!parsedEmail.success) {
-    throw new Error(
+    throw new OidcLoginError(
+      "invalid_email",
       `OIDC ${settings.emailClaim} claim is not a valid email address`,
     );
   }
@@ -199,7 +221,10 @@ export async function createOidcProvider(
       });
       const claims = tokens.claims();
       if (!claims) {
-        throw new Error("OIDC token response missing ID token claims");
+        throw new OidcLoginError(
+          "missing_id_token",
+          "OIDC token response missing ID token claims",
+        );
       }
       return extractOidcClaims(
         settings,

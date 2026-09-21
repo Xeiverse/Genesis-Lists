@@ -15,6 +15,7 @@ import {
   OIDC_STATE_TTL_MS,
   OIDC_MOBILE_TICKET_TTL_MS,
   ANDROID_OAUTH_CALLBACK_URI,
+  OidcLoginError,
   newOidcStateMaterials,
   type OidcClaims,
   type OidcProvider,
@@ -71,6 +72,7 @@ function disabledOidcSettings(): OidcSettings {
     emailClaim: "email",
     nameClaim: "name",
     disablePasswordLogin: false,
+    requireEmailVerified: true,
     redirectUri: "",
   };
 }
@@ -222,6 +224,32 @@ export async function registerAuth(
     return url.href;
   }
 
+  function androidOidcStartHtml(idpUrl: string) {
+    const escapedHref = idpUrl
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    const escapedJs = idpUrl
+      .replace(/\\/g, "\\\\")
+      .replace(/'/g, "\\'")
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Continue sign-in</title>
+  <meta http-equiv="refresh" content="0;url=${escapedHref}"/>
+  <script>location.replace('${escapedJs}');</script>
+</head>
+<body>
+  <p><a href="${escapedHref}">Continue to sign-in</a></p>
+</body>
+</html>`;
+  }
+
   function androidHandoffHtml(deepLink: string) {
     const escapedHref = deepLink
       .replace(/&/g, "&amp;")
@@ -280,7 +308,7 @@ export async function registerAuth(
           existingIdentity.user_id,
         );
       } else if (holder !== existingIdentity.user_id) {
-        throw new Error("OIDC_EMAIL_TAKEN");
+        throw new OidcLoginError("email_taken", "OIDC_EMAIL_TAKEN");
       }
       return { userId: existingIdentity.user_id };
     }
@@ -297,7 +325,10 @@ export async function registerAuth(
     }
 
     if (!oidcSettings.autoRegister) {
-      throw new Error("OIDC_AUTO_REGISTER_DISABLED");
+      throw new OidcLoginError(
+        "auto_register_disabled",
+        "OIDC_AUTO_REGISTER_DISABLED",
+      );
     }
 
     const userId = uuid();
@@ -422,6 +453,15 @@ export async function registerAuth(
         nonce,
       });
       setOidcStateCookie(reply, state);
+      // Custom Tabs drop Set-Cookie on a 302 that immediately leaves the site
+      // (bounce tracking). A document response lets genesis_oidc_state stick
+      // before navigating to the IdP, so callback CSRF still binds the agent.
+      if (client === "android") {
+        return reply
+          .type("text/html; charset=utf-8")
+          .header("Cache-Control", "no-store")
+          .send(androidOidcStartHtml(url.href));
+      }
       return reply.redirect(url.href);
     } catch (err) {
       app.log.error?.(err);
@@ -449,30 +489,36 @@ export async function registerAuth(
       androidClient = peek?.client === "android";
     }
 
-    const failRedirect = () => {
+    const failRedirect = (reason: string) => {
       clearOidcStateCookie(reply);
       if (androidClient) {
-        return reply.redirect(androidHandoffPath({ error: "oidc" }));
+        return reply.redirect(androidHandoffPath({ error: "oidc", reason }));
       }
-      return reply.redirect("/login?error=oidc");
+      const login = new URLSearchParams({ error: "oidc", reason });
+      return reply.redirect(`/login?${login.toString()}`);
     };
 
     if (!oidc || !oidcSettings.enabled) {
-      return failRedirect();
+      return failRedirect("oidc_disabled");
     }
 
     if (query.error) {
       if (state) {
         db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
       }
-      return failRedirect();
+      return failRedirect("idp_error");
     }
 
-    if (!state || !cookieState || state !== cookieState) {
-      if (state) {
-        db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
-      }
-      return failRedirect();
+    if (!state) {
+      return failRedirect("missing_state");
+    }
+    if (!cookieState) {
+      db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      return failRedirect("missing_state_cookie");
+    }
+    if (state !== cookieState) {
+      db.prepare(`DELETE FROM oidc_login_states WHERE state = ?`).run(state);
+      return failRedirect("state_cookie_mismatch");
     }
 
     const stored = db
@@ -493,13 +539,14 @@ export async function registerAuth(
     androidClient = stored?.client === "android";
 
     if (!stored || stored.expires_at <= nowIso()) {
-      return failRedirect();
+      return failRedirect("missing_or_expired_login_state");
     }
 
     try {
       const callbackUrl = new URL(oidcSettings.redirectUri);
       for (const [key, value] of Object.entries(query)) {
-        if (value != null) callbackUrl.searchParams.set(key, value);
+        const text = Array.isArray(value) ? value[0] : value;
+        if (typeof text === "string") callbackUrl.searchParams.set(key, text);
       }
 
       const claims = await oidc.exchangeCallback({
@@ -526,7 +573,9 @@ export async function registerAuth(
       return reply.redirect("/");
     } catch (err) {
       app.log.error?.(err);
-      return failRedirect();
+      const reason =
+        err instanceof OidcLoginError ? err.reason : "exchange_or_user_failed";
+      return failRedirect(reason);
     }
   });
 
@@ -542,6 +591,10 @@ export async function registerAuth(
       deepLinkQuery.error = error;
     } else {
       deepLinkQuery.error = "oidc";
+    }
+    const reason = query.reason?.trim();
+    if (reason) {
+      deepLinkQuery.reason = reason;
     }
 
     const deepLink = androidAppDeepLink(deepLinkQuery);

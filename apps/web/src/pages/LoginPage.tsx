@@ -23,6 +23,21 @@ import { ApiError, api } from "../api";
 import { AppMark } from "../AppMark";
 import { useAuth } from "../auth";
 
+function oidcFailureText(reason: string | null): string {
+  switch (reason) {
+    case "email_unverified":
+      return "The identity provider did not mark your email as verified. Ask the person who runs Authentik to mark your address as verified, then try again.";
+    case "auto_register_disabled":
+      return "No local account exists for this email, and auto-registration is disabled.";
+    case "email_taken":
+      return "This identity is already linked to a different account.";
+    case "missing_email":
+      return "The identity provider did not send an email address.";
+    default:
+      return "Sign-in with the identity provider failed. Try again.";
+  }
+}
+
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
@@ -34,6 +49,7 @@ export function LoginPage() {
   const [config, setConfig] = useState<AuthConfigDto | null>(null);
 
   const oidcError = searchParams.get("error") === "oidc";
+  const oidcReason = searchParams.get("reason");
   const autoLaunchParam = searchParams.get("autoLaunch");
 
   useEffect(() => {
@@ -119,7 +135,7 @@ export function LoginPage() {
           </Typography>
           {(error || oidcError) && (
             <Alert severity="error">
-              {error ?? "Sign-in with the identity provider failed. Try again."}
+              {error ?? oidcFailureText(oidcReason)}
             </Alert>
           )}
           {showPassword && (

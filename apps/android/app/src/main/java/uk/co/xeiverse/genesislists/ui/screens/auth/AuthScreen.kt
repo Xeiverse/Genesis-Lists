@@ -107,7 +107,7 @@ fun AuthScreen(
     LaunchedEffect(oauthTicket, oauthError) {
         when {
             oauthError != null -> {
-                error = OAuthDeepLink.oidcFailureMessage(repository.getBaseUrl())
+                error = OAuthDeepLink.oidcFailureMessage(repository.getBaseUrl(), oauthError)
                 onOauthHandled()
             }
             oauthTicket != null -> {

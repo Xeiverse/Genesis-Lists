@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app.js";
+import { OidcLoginError } from "./oidc.js";
 import { BODY_LIMIT_BYTES } from "./util.js";
 
 function getCookie(res: { headers: Record<string, unknown> }) {
@@ -23,6 +24,22 @@ function pickCookie(
   const list = Array.isArray(raw) ? raw : [String(raw)];
   const match = list.find((c) => String(c).startsWith(`${name}=`));
   return match ? String(match).split(";")[0] : undefined;
+}
+
+function oidcStartAuthorizeUrl(start: {
+  statusCode: number;
+  headers: Record<string, unknown>;
+  body: string;
+}): URL {
+  if (start.statusCode === 302) {
+    const location = start.headers.location;
+    assert.equal(typeof location, "string");
+    return new URL(location as string);
+  }
+  assert.equal(start.statusCode, 200);
+  const match = start.body.match(/content="0;url=([^"]+)"/);
+  assert.ok(match, "expected meta refresh to the IdP");
+  return new URL(match[1].replaceAll("&amp;", "&").replaceAll("&quot;", '"'));
 }
 
 describe("Genesis Lists API contract", async () => {
@@ -813,6 +830,7 @@ describe("OIDC auth", async () => {
       emailClaim: "email",
       nameClaim: "name",
       disablePasswordLogin: opts.disablePasswordLogin ?? false,
+      requireEmailVerified: true,
       redirectUri: "https://lists.example.com/api/auth/oidc/callback",
     };
     const oidc = createMockOidcProvider(settings, {
@@ -963,7 +981,7 @@ describe("OIDC auth", async () => {
           url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
         });
         assert.equal(callback.statusCode, 302);
-        assert.equal(callback.headers.location, "/login?error=oidc");
+        assert.equal(callback.headers.location, "/login?error=oidc&reason=missing_state_cookie");
         assert.equal(pickCookie(callback, "genesis_session"), undefined);
       },
     );
@@ -1055,7 +1073,7 @@ describe("OIDC auth", async () => {
         assert.equal(first.headers.location, "/");
 
         const second = await signInWithOidc();
-        assert.equal(second.headers.location, "/login?error=oidc");
+        assert.equal(second.headers.location, "/login?error=oidc&reason=email_taken");
         assert.equal(pickCookie(second, "genesis_session"), undefined);
 
         const carolLogin = await app.inject({
@@ -1093,7 +1111,37 @@ describe("OIDC auth", async () => {
           headers: { cookie: oidcCookie },
         });
         assert.equal(callback.statusCode, 302);
-        assert.equal(callback.headers.location, "/login?error=oidc");
+        assert.equal(callback.headers.location, "/login?error=oidc&reason=auto_register_disabled");
+      },
+    );
+  });
+
+  await it("OIDC callback with unverified email redirects with email_unverified", async () => {
+    await withOidcApp(
+      {
+        exchange: () => {
+          throw new OidcLoginError(
+            "email_unverified",
+            "OIDC token does not assert email_verified",
+          );
+        },
+      },
+      async (app) => {
+        const start = await app.inject({ method: "GET", url: "/api/auth/oidc/start" });
+        const state = new URL(start.headers.location as string).searchParams.get(
+          "state",
+        )!;
+        const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+          headers: { cookie: oidcCookie },
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(
+          callback.headers.location,
+          "/login?error=oidc&reason=email_unverified",
+        );
       },
     );
   });
@@ -1113,11 +1161,12 @@ describe("OIDC auth", async () => {
           method: "GET",
           url: "/api/auth/oidc/start?client=android",
         });
-        assert.equal(start.statusCode, 302);
-        const state = new URL(start.headers.location as string).searchParams.get(
-          "state",
-        )!;
+        assert.equal(start.statusCode, 200);
+        assert.match(start.headers["content-type"] ?? "", /text\/html/);
+        assert.ok(start.body.includes("Continue to sign-in"));
+        const state = oidcStartAuthorizeUrl(start).searchParams.get("state")!;
         const oidcCookie = pickCookie(start, "genesis_oidc_state")!;
+        assert.ok(oidcCookie);
 
         const callback = await app.inject({
           method: "GET",
@@ -1184,6 +1233,36 @@ describe("OIDC auth", async () => {
     );
   });
 
+  await it("Android OIDC callback without the state cookie is rejected", async () => {
+    await withOidcApp(
+      {
+        exchange: () => ({
+          issuer: "https://idp.example.com/application/o/genesis",
+          subject: "sub-android-nocookie",
+          email: "android-nocookie@example.com",
+          name: "Android No Cookie",
+        }),
+      },
+      async (app) => {
+        const start = await app.inject({
+          method: "GET",
+          url: "/api/auth/oidc/start?client=android",
+        });
+        const state = oidcStartAuthorizeUrl(start).searchParams.get("state")!;
+
+        const callback = await app.inject({
+          method: "GET",
+          url: `/api/auth/oidc/callback?code=abc&state=${encodeURIComponent(state)}`,
+        });
+        assert.equal(callback.statusCode, 302);
+        assert.equal(
+          callback.headers.location,
+          "/api/auth/oidc/android-handoff?error=oidc&reason=missing_state_cookie",
+        );
+      },
+    );
+  });
+
   await it("Android OIDC failure redirects to the handoff bridge", async () => {
     await withOidcApp(
       {
@@ -1196,9 +1275,7 @@ describe("OIDC auth", async () => {
           method: "GET",
           url: "/api/auth/oidc/start?client=android",
         });
-        const state = new URL(start.headers.location as string).searchParams.get(
-          "state",
-        )!;
+        const state = oidcStartAuthorizeUrl(start).searchParams.get("state")!;
         const callback = await app.inject({
           method: "GET",
           url: `/api/auth/oidc/callback?error=access_denied&state=${encodeURIComponent(state)}`,
@@ -1206,7 +1283,7 @@ describe("OIDC auth", async () => {
         assert.equal(callback.statusCode, 302);
         assert.equal(
           callback.headers.location,
-          "/api/auth/oidc/android-handoff?error=oidc",
+          "/api/auth/oidc/android-handoff?error=oidc&reason=idp_error",
         );
 
         const handoff = await app.inject({

@@ -135,6 +135,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `OIDC_AUTO_LAUNCH` | No | `false` | Skip the login form and start OIDC immediately |
 | `OIDC_EMAIL_CLAIM` | No | `email` | Claim matched against the local account email (merge / create). Must be a valid address. The `email_verified` flag is always read under that standard name, so pointing this at another claim means the flag may describe a different address |
 | `OIDC_NAME_CLAIM` | No | `name` | Claim used as the display name when auto-registering; falls back to the email local part |
+| `OIDC_REQUIRE_EMAIL_VERIFIED` | No | `true` | When `true`, refuse login if `email_verified` is present and not affirmative. Authentik local users often send `false`; set this to `false` only for an IdP you control |
 | `OIDC_DISABLE_PASSWORD_LOGIN` | No | `false` | When `true` and OIDC is enabled, reject local password login/register |
 | `OIDC_REDIRECT_URI` | No | derived | Full callback URL override; default `{PUBLIC_BASE_URL}/api/auth/oidc/callback` |
 

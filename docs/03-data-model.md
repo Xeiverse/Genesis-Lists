@@ -119,7 +119,7 @@ Unique membership is enforced by the composite primary key `(list_id, user_id)`.
 ## OIDC identity rules
 
 1. Lookup order on callback: `(issuer, subject)` → else merge by email claim → else auto-register if enabled.
-2. The email from the configured claim must satisfy the same rules as local registration, and is normalized the same way before comparison. A missing or malformed claim fails the login, as does an `email_verified` claim that is present and not affirmative.
+2. The email from the configured claim must satisfy the same rules as local registration, and is normalized the same way before comparison. A missing or malformed claim fails the login, as does an `email_verified` claim that is present and not affirmative unless `OIDC_REQUIRE_EMAIL_VERIFIED=false`.
 3. Merging by email is what links an account created before the IdP was connected to its IdP counterpart.
 4. Auto-register sets `name` from the configured name claim, falling back to the email local part.
 5. When a linked identity presents an email that another account already holds, the email is left unchanged rather than merging the two accounts.

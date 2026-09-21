@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
                 intent.data = null
             }
             is OAuthDeepLink.Result.Error -> {
-                oauthError = result.code
+                oauthError = result.reason ?: result.code
                 oauthTicket = null
                 intent.data = null
             }

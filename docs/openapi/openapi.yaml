@@ -144,9 +144,12 @@ paths:
       operationId: startOidc
       summary: Begin OIDC Authorization Code login
       description: >
-        Redirects the browser (or Android Custom Tab) to the IdP authorize URL.
-        Returns 404 when OIDC is disabled. Pass `client=android` so a successful
-        callback redirects to the HTTPS android-handoff bridge (which opens the
+        Web browsers are redirected (302) to the IdP authorize URL. Android
+        Custom Tabs (`client=android`) receive a 200 HTML page that then
+        navigates to the IdP, so Chrome can persist the signed
+        `genesis_oidc_state` cookie. Returns 404 when OIDC is disabled.
+        `client=android` also marks the login so a successful callback
+        redirects to the HTTPS android-handoff bridge (which opens the
         app deep link with a one-time ticket) instead of setting the session
         cookie for the browser. The IdP redirect URI remains the web
         callback (`PUBLIC_BASE_URL/api/auth/oidc/callback`).
@@ -161,12 +164,18 @@ paths:
             enum: [android]
       responses:
         '302':
-          description: Redirect to the identity provider
+          description: Redirect to the identity provider (web start)
           headers:
             Location:
               schema:
                 type: string
                 format: uri
+        '200':
+          description: HTML interstitial for Android Custom Tabs, then the IdP
+          content:
+            text/html:
+              schema:
+                type: string
         '404':
           $ref: '#/components/responses/NotFoundError'
         '503':

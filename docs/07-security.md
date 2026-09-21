@@ -17,7 +17,7 @@
 - Redirect URI is fixed to `{PUBLIC_BASE_URL}/api/auth/oidc/callback` or an explicit `OIDC_REDIRECT_URI` — never taken from user input.
 - IdP tokens are used only during the callback exchange; they are not persisted.
 - Email claims must satisfy the same rules as local registration and are normalized the same way before merge or auto-register. A login with a missing or malformed email claim is refused.
-- A login is refused unless `email_verified` is absent or affirmative. An absent claim is accepted because not every IdP emits it; anything present must say `true` (or `"true"` / `1` / `"1"`), so an IdP that serializes the flag as the string `"false"` is not mistaken for a verifying one. Note that the flag is read under its standard name even when `OIDC_EMAIL_CLAIM` points at a non-standard claim, where it may describe a different address.
+- A login is refused unless `email_verified` is absent or affirmative, or the operator sets `OIDC_REQUIRE_EMAIL_VERIFIED=false`. An absent claim is accepted because not every IdP emits it; anything present must say `true` (or `"true"` / `1` / `"1"`), so an IdP that serializes the flag as the string `"false"` is not mistaken for a verifying one. Disable the check only for an IdP whose enrollment you control. Note that the flag is read under its standard name even when `OIDC_EMAIL_CLAIM` points at a non-standard claim, where it may describe a different address.
 - **Linking by email trusts the IdP.** On first OIDC login, an identity whose email matches an existing local account takes over that account — that is what lets an instance adopt an IdP after accounts already exist. An IdP that lets users set an arbitrary, unverified email can therefore take over a local account. Only connect an IdP you control, and prefer one that verifies addresses. See [ADR 0006](adr/0006-email-login-identifier.md).
 - `OIDC_CLIENT_SECRET` and related secrets live in env; never commit them.
 - Startup fails if `OIDC_ENABLED=true` but discovery or required env is invalid.
@@ -27,7 +27,7 @@ See [ADR 0005](adr/0005-oidc.md) and [guides/oauth-authentik.md](guides/oauth-au
 ## Android companion
 
 - Session cookie stored in EncryptedSharedPreferences via OkHttp `CookieJar` (same `genesis_session` as web). Backup is disabled on the app.
-- Android OIDC uses Custom Tabs + a one-time server ticket (`oidc_mobile_tickets`, short TTL). The HTTPS handoff page does **not** set a session cookie; only `POST /api/auth/oidc/mobile-exchange` sets one, into the app jar. Deep-link intent data is cleared after parse; a consumed ticket is not re-exchanged when a **sendable** session already exists. A `Secure` cookie that cannot be sent on the configured `http://` URL is treated as no session (and cleared after password/register/ticket-exchange detect the mismatch), so a later OIDC retry still exchanges the ticket.
+- Android OIDC uses Custom Tabs + a one-time server ticket (`oidc_mobile_tickets`, short TTL). `GET /api/auth/oidc/start?client=android` returns HTML that navigates to the IdP so Chrome can persist the signed `genesis_oidc_state` cookie (a 302 bounce drops it). The callback still requires that cookie, same as web. The HTTPS handoff page does **not** set a session cookie; only `POST /api/auth/oidc/mobile-exchange` sets one, into the app jar. Deep-link intent data is cleared after parse; a consumed ticket is not re-exchanged when a **sendable** session already exists. A `Secure` cookie that cannot be sent on the configured `http://` URL is treated as no session (and cleared after password/register/ticket-exchange detect the mismatch), so a later OIDC retry still exchanges the ticket.
 - Cleartext HTTP is rejected unless the host is private LAN / localhost / emulator / `.local` (`ServerUrlPolicy`). Network Security Config remains permissive because CIDRs cannot be expressed in XML.
 - Custom proxy headers (encrypted prefs) survive logout and server URL changes; session cookies and Room cache do not survive a URL change.
 
@@ -59,7 +59,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Password theft at rest | argon2id |
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
-| OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser; one-time server-side state rows |
+| OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser (web 302 start; Android HTML interstitial so Custom Tabs persist the cookie); one-time server-side state rows |
 | Android OIDC ticket replay | One-time `oidc_mobile_tickets` row deleted on exchange; short TTL; no session cookie on handoff HTML |
 | Brute force | Soft limit: no distributed rate limit in the app; operators should rate-limit `/api/auth/*` at the reverse proxy |
 | Path traversal / SQLi | Parameterized SQL via `node:sqlite` prepared statements |
@@ -68,7 +68,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 | Oversize payloads | 16 KiB JSON body limit |
 | Address enumeration via directory | Accepted for self-host sharing UX: an unambiguous share picker needs the address. `DIRECTORY_SHOW_EMAILS=false` removes it at the cost of indistinguishable rows. Keep instances private if neither trade-off is acceptable |
 | Display-name spoofing in the share picker | Names are not unique and are freely changeable, so the address is shown alongside; control characters and bidi overrides are rejected so a name cannot render as another |
-| Account takeover via IdP email spoofing | Refuse any `email_verified` that is present and not affirmative; document that email linking trusts the IdP; operators should only connect IdPs they control |
+| Account takeover via IdP email spoofing | Refuse any `email_verified` that is present and not affirmative unless `OIDC_REQUIRE_EMAIL_VERIFIED=false`; document that email linking trusts the IdP; operators should only connect IdPs they control |
 | Registration email enumeration | `409 CONFLICT` on register reveals that an address is registered. Accepted: closed/bootstrap registration is the default, and rate limiting belongs at the reverse proxy |
 | Login timing enumeration | An unknown address returns before argon2 runs, so response time also reveals whether an address is registered. Accepted on the same terms as the `409` above; rate-limit `/api/auth/*` at the reverse proxy |
 

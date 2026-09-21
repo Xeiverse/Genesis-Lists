@@ -60,7 +60,7 @@ See [01-requirements.md](01-requirements.md). Request bodies larger than 16 KiB 
 |--------|------------|
 | Password theft at rest | argon2id |
 | XSS stealing session | HTTP-only cookie; signed cookie; no `dangerouslySetInnerHTML` |
-| Stolen PAT | Hash-at-rest; revoke via Settings; PAT cannot mint further tokens |
+| Stolen PAT | Hash-at-rest; revoke via Settings; PAT cannot mint further tokens; password change deletes all of the user’s PATs |
 | CSRF | SameSite=Lax + same-origin SPA; consider CSRF token if cookie auth expands to cross-site |
 | OIDC CSRF / replay | `state` + PKCE + signed `genesis_oidc_state` cookie bound to the initiating browser (web 302 start; Android HTML interstitial so Custom Tabs persist the cookie); one-time server-side state rows |
 | Android OIDC ticket replay | One-time `oidc_mobile_tickets` row deleted on exchange; short TTL; no session cookie on handoff HTML |

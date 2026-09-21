@@ -30,6 +30,8 @@ import {
   SESSION_COOKIE,
   SESSION_DAYS,
   nowIso,
+  pathAllowsBearerAuth,
+  requireSessionUser,
   sendError,
   uuid,
   type RegistrationMode,
@@ -206,6 +208,9 @@ export async function registerAuth(
       }
     }
 
+    // PATs authenticate list/item APIs only — not account, directory, or token CRUD.
+    if (!pathAllowsBearerAuth(request.url)) return;
+
     const bearer = readBearerToken(request);
     if (!bearer || !bearer.startsWith(API_TOKEN_PREFIX)) return;
 
@@ -231,18 +236,6 @@ export async function registerAuth(
     request.user = { id: row.id, email: row.email, name: row.name };
     request.authMethod = "bearer";
   });
-
-  /** Token management is cookie-session only (a PAT cannot mint or revoke PATs). */
-  function requireSessionUser(
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): { id: string; email: string; name: string } | undefined {
-    if (!request.user || request.authMethod !== "session") {
-      sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-      return undefined;
-    }
-    return request.user;
-  }
 
   function setSessionCookie(reply: FastifyReply, sessionId: string) {
     reply.setCookie(SESSION_COOKIE, sessionId, {
@@ -730,9 +723,8 @@ export async function registerAuth(
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const user = await requireSessionUser(request, reply);
+    if (!user) return;
     const sessionId = readSessionId(request);
     if (sessionId) {
       db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
@@ -742,10 +734,9 @@ export async function registerAuth(
   });
 
   app.get("/api/auth/me", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
-    const user = toUserDto(request.user.id);
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
+    const user = toUserDto(sessionUser.id);
     if (!user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -753,9 +744,8 @@ export async function registerAuth(
   });
 
   app.patch("/api/auth/me", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
 
     const parsed = updateProfileSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -764,10 +754,10 @@ export async function registerAuth(
 
     db.prepare(`UPDATE users SET name = ? WHERE id = ?`).run(
       parsed.data.name,
-      request.user.id,
+      sessionUser.id,
     );
 
-    const user = toUserDto(request.user.id);
+    const user = toUserDto(sessionUser.id);
     if (!user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -775,9 +765,8 @@ export async function registerAuth(
   });
 
   app.post("/api/auth/change-password", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
 
     const parsed = changePasswordSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -787,7 +776,7 @@ export async function registerAuth(
     const { currentPassword, newPassword } = parsed.data;
     const row = db
       .prepare(`SELECT * FROM users WHERE id = ?`)
-      .get(request.user.id) as UserRow | undefined;
+      .get(sessionUser.id) as UserRow | undefined;
     if (!row) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -808,24 +797,26 @@ export async function registerAuth(
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
     db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(
       passwordHash,
-      request.user.id,
+      sessionUser.id,
     );
 
+    // Lockout: invalidate other sessions and revoke all PATs.
     const sessionId = readSessionId(request);
     if (sessionId) {
       db.prepare(`DELETE FROM sessions WHERE user_id = ? AND id != ?`).run(
-        request.user.id,
+        sessionUser.id,
         sessionId,
       );
     } else {
-      db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(request.user.id);
+      db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(sessionUser.id);
     }
+    db.prepare(`DELETE FROM api_tokens WHERE user_id = ?`).run(sessionUser.id);
 
     return reply.status(204).send();
   });
 
   app.get("/api/auth/tokens", async (request, reply) => {
-    const user = requireSessionUser(request, reply);
+    const user = await requireSessionUser(request, reply);
     if (!user) return;
 
     const rows = db
@@ -846,7 +837,7 @@ export async function registerAuth(
   });
 
   app.post("/api/auth/tokens", async (request, reply) => {
-    const user = requireSessionUser(request, reply);
+    const user = await requireSessionUser(request, reply);
     if (!user) return;
 
     const parsed = createApiTokenSchema.safeParse(request.body);
@@ -875,7 +866,7 @@ export async function registerAuth(
   });
 
   app.delete("/api/auth/tokens/:id", async (request, reply) => {
-    const user = requireSessionUser(request, reply);
+    const user = await requireSessionUser(request, reply);
     if (!user) return;
 
     const { id } = request.params as { id: string };

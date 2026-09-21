@@ -1864,6 +1864,166 @@ describe("personal access tokens (Bearer)", async () => {
     assert.equal(res.statusCode, 400);
     assert.equal(res.json().error.code, "VALIDATION_ERROR");
   });
+
+  await it("Bearer cannot use account or directory routes", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Boundary" },
+    });
+    const token = created.json().token as string;
+    const auth = { authorization: `Bearer ${token}` };
+
+    for (const [method, url, payload] of [
+      ["GET", "/api/auth/me", undefined],
+      ["PATCH", "/api/auth/me", { name: "No" }],
+      [
+        "POST",
+        "/api/auth/change-password",
+        { currentPassword: "password1", newPassword: "password2" },
+      ],
+      ["POST", "/api/auth/logout", undefined],
+      ["GET", "/api/users", undefined],
+    ] as const) {
+      const res = await app.inject({
+        method,
+        url,
+        headers: auth,
+        payload,
+      });
+      assert.equal(res.statusCode, 401, `${method} ${url}`);
+    }
+  });
+
+  await it("Bearer can delete lists and rewrite members", async () => {
+    const bob = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "pat-bob@example.com", password: "password1" },
+    });
+    const bobCookie = getCookie(bob)!;
+    const bobId = bob.json().id as string;
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Members" },
+    });
+    const token = created.json().token as string;
+    const auth = { authorization: `Bearer ${token}` };
+
+    const shared = await app.inject({
+      method: "POST",
+      url: "/api/lists",
+      headers: auth,
+      payload: { name: "Shared via PAT" },
+    });
+    assert.equal(shared.statusCode, 201);
+    const sharedId = shared.json().id as string;
+
+    const members = await app.inject({
+      method: "PUT",
+      url: `/api/lists/${sharedId}/members`,
+      headers: auth,
+      payload: { userIds: [bobId] },
+    });
+    assert.equal(members.statusCode, 200);
+    assert.equal(members.json().members.length, 1);
+
+    const asBob = await app.inject({
+      method: "GET",
+      url: `/api/lists/${sharedId}/items`,
+      headers: { cookie: bobCookie },
+    });
+    assert.equal(asBob.statusCode, 200);
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/lists/${sharedId}`,
+      headers: auth,
+    });
+    assert.equal(del.statusCode, 204);
+  });
+
+  await it("user B cannot revoke user A's token", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Alice only" },
+    });
+    const { id, token } = created.json() as { id: string; token: string };
+
+    const other = await app.inject({
+      method: "POST",
+      url: "/api/auth/register",
+      payload: { email: "pat-other@example.com", password: "password1" },
+    });
+    const otherCookie = getCookie(other)!;
+
+    const del = await app.inject({
+      method: "DELETE",
+      url: `/api/auth/tokens/${id}`,
+      headers: { cookie: otherCookie },
+    });
+    assert.equal(del.statusCode, 404);
+
+    const lists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(lists.statusCode, 200);
+  });
+
+  await it("password change revokes existing PATs", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+      payload: { name: "Will revoke" },
+    });
+    const token = created.json().token as string;
+
+    const change = await app.inject({
+      method: "POST",
+      url: "/api/auth/change-password",
+      headers: { cookie },
+      payload: { currentPassword: "password1", newPassword: "password2" },
+    });
+    assert.equal(change.statusCode, 204);
+
+    const lists = await app.inject({
+      method: "GET",
+      url: "/api/lists",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(lists.statusCode, 401);
+
+    const listed = await app.inject({
+      method: "GET",
+      url: "/api/auth/tokens",
+      headers: { cookie },
+    });
+    assert.equal(listed.statusCode, 200);
+    assert.equal(
+      (listed.json().tokens as Array<{ name: string }>).some(
+        (t) => t.name === "Will revoke",
+      ),
+      false,
+    );
+
+    // Restore password for any later tests in this suite that re-login.
+    cookie = getCookie(
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: "pat@example.com", password: "password2" },
+      }),
+    )!;
+  });
 });
 
 describe("directory email visibility", async () => {

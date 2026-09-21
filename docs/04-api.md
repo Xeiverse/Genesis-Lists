@@ -12,7 +12,7 @@ All endpoints are under `/api`.
 - **Register / login** set the cookie on success (when password login is enabled).
 - **OIDC callback** sets the same cookie after a successful IdP login.
 - **Logout** clears the cookie and deletes the server-side session (local only).
-- **Personal access tokens (Bearer):** create via `POST /api/auth/tokens` while signed in (Settings UI or curl). The plaintext token (`gls_…`) is returned **once**. Send `Authorization: Bearer <token>` on list/item routes. The server stores only a SHA-256 hash. Token management endpoints require a session cookie (a PAT cannot mint or revoke PATs).
+- **Personal access tokens (Bearer):** create via `POST /api/auth/tokens` while signed in (Settings UI or curl). The plaintext token (`gls_…`) is returned **once**. Send `Authorization: Bearer <token>` on list/item routes only (not account, directory, or token management). The server stores only a SHA-256 hash. Token management endpoints require a session cookie (a PAT cannot mint or revoke PATs). Changing your password revokes all of your PATs.
 - Protected routes require a valid session **or** (for list/item APIs) a valid Bearer token; otherwise `401` with error code `UNAUTHORIZED`.
 
 ## Error shape
@@ -45,7 +45,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 | POST | `/api/auth/logout` | Yes | Destroy session |
 | GET | `/api/auth/me` | Yes | Current user `{ id, email, name, authProviders }` |
 | PATCH | `/api/auth/me` | Yes | Update display name `{ "name": "..." }`; returns the updated user. The email cannot be changed |
-| POST | `/api/auth/change-password` | Yes (session) | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions; current session stays. `403` if the user has no password |
+| POST | `/api/auth/change-password` | Yes (session) | Change password `{ "currentPassword", "newPassword" }`. Deletes other sessions and **revokes all API tokens**; current session stays. `403` if the user has no password |
 | GET | `/api/auth/tokens` | Yes (session) | List personal access tokens for the current user (metadata only; no secrets) |
 | POST | `/api/auth/tokens` | Yes (session) | Create a PAT `{ "name": "..." }`. Response includes plaintext `token` **once** (`gls_…`) |
 | DELETE | `/api/auth/tokens/{id}` | Yes (session) | Revoke a PAT. `404` if missing or not owned |
@@ -54,7 +54,7 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/users` | Yes | Directory of all users `{ id, name, email }[]` for the share picker (self-host). Display names are not unique, so the address is what tells people apart; `email` is omitted when the operator sets `DIRECTORY_SHOW_EMAILS=false` |
+| GET | `/api/users` | Yes (session) | Directory of all users `{ id, name, email }[]` for the share picker (self-host). Display names are not unique, so the address is what tells people apart; `email` is omitted when the operator sets `DIRECTORY_SHOW_EMAILS=false`. Bearer PATs cannot access this endpoint |
 
 ### Lists
 

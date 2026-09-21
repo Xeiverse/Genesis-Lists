@@ -242,14 +242,14 @@ export function SettingsPage() {
         </Paper>
 
         <Paper sx={{ p: 3, mb: 2 }}>
-          <Stack spacing={2} component="form" onSubmit={(e) => void handleCreateToken(e)}>
+          <Stack spacing={2}>
             <Typography variant="subtitle1" fontWeight={600}>
               API tokens
             </Typography>
             <Typography variant="body2" color="text.secondary">
               Personal access tokens authenticate scripts and voice assistants with{" "}
               <code>Authorization: Bearer</code> on list and item APIs. The secret is shown
-              once when you create a token.
+              once when you create a token. Changing your password revokes all API tokens.
             </Typography>
 
             {tokenError && (
@@ -263,6 +263,7 @@ export function SettingsPage() {
                 severity="warning"
                 action={
                   <IconButton
+                    type="button"
                     color="inherit"
                     size="small"
                     aria-label="copy token"
@@ -287,19 +288,25 @@ export function SettingsPage() {
               </Alert>
             )}
 
-            <TextField
-              label="Token name"
-              value={tokenName}
-              onChange={(e) => setTokenName(e.target.value)}
-              placeholder="Genesis voice"
-              fullWidth
-              helperText="A label so you can tell tokens apart later"
-            />
-            <Box>
-              <Button type="submit" disabled={tokenCreating || !tokenName.trim()}>
-                Create token
-              </Button>
-            </Box>
+            <Stack
+              spacing={2}
+              component="form"
+              onSubmit={(e) => void handleCreateToken(e)}
+            >
+              <TextField
+                label="Token name"
+                value={tokenName}
+                onChange={(e) => setTokenName(e.target.value)}
+                placeholder="Genesis voice"
+                fullWidth
+                helperText="A label so you can tell tokens apart later"
+              />
+              <Box>
+                <Button type="submit" disabled={tokenCreating || !tokenName.trim()}>
+                  Create token
+                </Button>
+              </Box>
+            </Stack>
 
             {tokensLoading ? (
               <Typography variant="body2" color="text.secondary">
@@ -317,6 +324,7 @@ export function SettingsPage() {
                     disableGutters
                     secondaryAction={
                       <IconButton
+                        type="button"
                         edge="end"
                         aria-label={`revoke ${t.name}`}
                         disabled={revokingId === t.id}
@@ -345,7 +353,8 @@ export function SettingsPage() {
                   Change password
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  New password must be at least 8 characters.
+                  New password must be at least 8 characters. Changing your password
+                  also revokes all API tokens and signs out other sessions.
                 </Typography>
 
                 {error && (

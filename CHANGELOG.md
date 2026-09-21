@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Android: ticking or editing a list item no longer sends `null` for omitted PATCH fields (`text`/`position`), which the API rejects as Invalid request body
 - Personal access tokens (Bearer) for list/item APIs: create/list/revoke via session (`/api/auth/tokens`), Settings UI, schema version 6 (`api_tokens` stores hash only)
 
 ## 0.3.1

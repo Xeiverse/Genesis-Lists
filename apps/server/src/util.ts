@@ -76,9 +76,13 @@ export function resolveSessionSecret(opts: {
 
 export type AuthUser = { id: string; email: string; name: string };
 
+/** How the request was authenticated (session cookie vs Bearer PAT). */
+export type AuthMethod = "session" | "bearer";
+
 declare module "fastify" {
   interface FastifyRequest {
     user?: AuthUser;
+    authMethod?: AuthMethod;
   }
 }
 
@@ -95,4 +99,26 @@ export async function requireUser(request: FastifyRequest, reply: FastifyReply) 
     return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
   }
   return request.user;
+}
+
+/** Cookie session only — rejects Bearer PATs (account, directory, token management). */
+export async function requireSessionUser(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<AuthUser | undefined> {
+  if (!request.user || request.authMethod !== "session") {
+    sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
+    return undefined;
+  }
+  return request.user;
+}
+
+/** Paths where a personal access token may authenticate (list/item APIs). */
+export function pathAllowsBearerAuth(urlPath: string): boolean {
+  const path = urlPath.split("?")[0] ?? "";
+  return (
+    path === "/api/lists" ||
+    path.startsWith("/api/lists/") ||
+    path.startsWith("/api/items/")
+  );
 }

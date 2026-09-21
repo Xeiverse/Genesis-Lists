@@ -61,6 +61,27 @@ export const changePasswordSchema = z.object({
 
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
 
+/** Label for a personal access token (shown in Settings; not a secret). */
+export const apiTokenNameSchema = z.string().trim().min(1).max(64);
+
+export const createApiTokenSchema = z.object({
+  name: apiTokenNameSchema,
+});
+
+export type CreateApiToken = z.infer<typeof createApiTokenSchema>;
+
+/** Metadata for a PAT. The plaintext secret is only returned once on create. */
+export type ApiTokenDto = {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+export type CreatedApiTokenDto = ApiTokenDto & {
+  token: string;
+};
+
 export const PREVIEW_ITEM_LIMIT = 8;
 
 export type ListItemPreviewDto = {

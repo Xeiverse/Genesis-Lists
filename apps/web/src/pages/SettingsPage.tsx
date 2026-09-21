@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Alert,
@@ -7,6 +7,9 @@ import {
   Button,
   Container,
   IconButton,
+  List,
+  ListItem,
+  ListItemText,
   Paper,
   Snackbar,
   Stack,
@@ -15,9 +18,12 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import {
   DISPLAY_NAME_UNSAFE_CHARS_MESSAGE,
   displayNameSchema,
+  type ApiTokenDto,
 } from "@genesis-lists/shared";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
@@ -36,12 +42,36 @@ export function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [tokens, setTokens] = useState<ApiTokenDto[]>([]);
+  const [tokensLoading, setTokensLoading] = useState(true);
+  const [tokenName, setTokenName] = useState("");
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const [tokenCreating, setTokenCreating] = useState(false);
+  const [newTokenPlaintext, setNewTokenPlaintext] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   const canChangePassword = user?.authProviders.includes("local") ?? false;
   const providersLabel =
     user?.authProviders
       .map((p) => (p === "local" ? "password" : "OIDC"))
       .join(", ") ?? "";
   const nameChanged = name.trim() !== (user?.name ?? "");
+
+  const loadTokens = useCallback(async () => {
+    setTokensLoading(true);
+    try {
+      const res = await api.tokens();
+      setTokens(res.tokens);
+    } catch {
+      setTokenError("Failed to load API tokens");
+    } finally {
+      setTokensLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTokens();
+  }, [loadTokens]);
 
   async function handleNameSubmit(e: FormEvent) {
     e.preventDefault();
@@ -98,6 +128,71 @@ export function SettingsPage() {
     }
   }
 
+  async function handleCreateToken(e: FormEvent) {
+    e.preventDefault();
+    setTokenError(null);
+    setNewTokenPlaintext(null);
+
+    const trimmed = tokenName.trim();
+    if (!trimmed) {
+      setTokenError("Give this token a name.");
+      return;
+    }
+
+    setTokenCreating(true);
+    try {
+      const created = await api.createToken(trimmed);
+      setTokenName("");
+      setNewTokenPlaintext(created.token);
+      setTokens((prev) => [
+        {
+          id: created.id,
+          name: created.name,
+          createdAt: created.createdAt,
+          lastUsedAt: created.lastUsedAt,
+        },
+        ...prev,
+      ]);
+    } catch (err) {
+      setTokenError(err instanceof ApiError ? err.message : "Failed to create token");
+    } finally {
+      setTokenCreating(false);
+    }
+  }
+
+  async function handleRevokeToken(id: string) {
+    setTokenError(null);
+    setRevokingId(id);
+    try {
+      await api.deleteToken(id);
+      setTokens((prev) => prev.filter((t) => t.id !== id));
+      setToast("Token revoked.");
+    } catch (err) {
+      setTokenError(err instanceof ApiError ? err.message : "Failed to revoke token");
+    } finally {
+      setRevokingId(null);
+    }
+  }
+
+  async function copyToken() {
+    if (!newTokenPlaintext) return;
+    try {
+      await navigator.clipboard.writeText(newTokenPlaintext);
+      setToast("Token copied to clipboard.");
+    } catch {
+      setToast("Copy failed — select the token and copy manually.");
+    }
+  }
+
+  function formatWhen(iso: string | null) {
+    if (!iso) return "Never";
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
+  }
+
   return (
     <Box sx={{ minHeight: "100dvh", bgcolor: "background.default" }}>
       <AppBar position="sticky" color="primary">
@@ -146,6 +241,110 @@ export function SettingsPage() {
           </Stack>
         </Paper>
 
+        <Paper sx={{ p: 3, mb: 2 }}>
+          <Stack spacing={2}>
+            <Typography variant="subtitle1" fontWeight={600}>
+              API tokens
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Personal access tokens authenticate scripts and voice assistants with{" "}
+              <code>Authorization: Bearer</code> on list and item APIs. The secret is shown
+              once when you create a token. Changing your password revokes all API tokens.
+            </Typography>
+
+            {tokenError && (
+              <Alert severity="error" onClose={() => setTokenError(null)}>
+                {tokenError}
+              </Alert>
+            )}
+
+            {newTokenPlaintext && (
+              <Alert
+                severity="warning"
+                action={
+                  <IconButton
+                    type="button"
+                    color="inherit"
+                    size="small"
+                    aria-label="copy token"
+                    onClick={() => void copyToken()}
+                  >
+                    <ContentCopyIcon fontSize="small" />
+                  </IconButton>
+                }
+              >
+                Copy this token now — it will not be shown again:
+                <Box
+                  component="code"
+                  sx={{
+                    display: "block",
+                    mt: 1,
+                    wordBreak: "break-all",
+                    fontSize: "0.85rem",
+                  }}
+                >
+                  {newTokenPlaintext}
+                </Box>
+              </Alert>
+            )}
+
+            <Stack
+              spacing={2}
+              component="form"
+              onSubmit={(e) => void handleCreateToken(e)}
+            >
+              <TextField
+                label="Token name"
+                value={tokenName}
+                onChange={(e) => setTokenName(e.target.value)}
+                placeholder="Genesis voice"
+                fullWidth
+                helperText="A label so you can tell tokens apart later"
+              />
+              <Box>
+                <Button type="submit" disabled={tokenCreating || !tokenName.trim()}>
+                  Create token
+                </Button>
+              </Box>
+            </Stack>
+
+            {tokensLoading ? (
+              <Typography variant="body2" color="text.secondary">
+                Loading tokens…
+              </Typography>
+            ) : tokens.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No tokens yet.
+              </Typography>
+            ) : (
+              <List dense disablePadding>
+                {tokens.map((t) => (
+                  <ListItem
+                    key={t.id}
+                    disableGutters
+                    secondaryAction={
+                      <IconButton
+                        type="button"
+                        edge="end"
+                        aria-label={`revoke ${t.name}`}
+                        disabled={revokingId === t.id}
+                        onClick={() => void handleRevokeToken(t.id)}
+                      >
+                        <DeleteOutlineIcon />
+                      </IconButton>
+                    }
+                  >
+                    <ListItemText
+                      primary={t.name}
+                      secondary={`Created ${formatWhen(t.createdAt)} · Last used ${formatWhen(t.lastUsedAt)}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Stack>
+        </Paper>
+
         <Paper sx={{ p: 3 }}>
           <Stack spacing={2} component="form" onSubmit={(e) => void handleSubmit(e)}>
             {canChangePassword ? (
@@ -154,7 +353,8 @@ export function SettingsPage() {
                   Change password
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  New password must be at least 8 characters.
+                  New password must be at least 8 characters. Changing your password
+                  also revokes all API tokens and signs out other sessions.
                 </Typography>
 
                 {error && (

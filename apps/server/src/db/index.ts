@@ -64,9 +64,18 @@ export type ItemRow = {
   updated_at: string;
 };
 
+export type ApiTokenRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+};
+
 export type Db = DatabaseSync;
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export function createDb(databasePath: string): Db {
   const dir = path.dirname(databasePath);
@@ -146,6 +155,12 @@ function migrate(db: Db) {
     applyMigration5(db);
     db.prepare(
       `INSERT INTO schema_migrations (version, applied_at) VALUES (5, ?)`,
+    ).run(new Date().toISOString());
+  }
+  if (getSchemaVersion(db) < 6) {
+    applyMigration6(db);
+    db.prepare(
+      `INSERT INTO schema_migrations (version, applied_at) VALUES (6, ?)`,
     ).run(new Date().toISOString());
   }
 }
@@ -393,6 +408,23 @@ function applyMigration5(db: Db) {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+  `);
+}
+
+/** Personal access tokens for Bearer API auth (hash only; plaintext shown once). */
+function applyMigration6(db: Db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_tokens (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+    CREATE INDEX IF NOT EXISTS idx_api_tokens_hash ON api_tokens(token_hash);
   `);
 }
 

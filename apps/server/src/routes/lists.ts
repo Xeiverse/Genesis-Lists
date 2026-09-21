@@ -12,7 +12,7 @@ import {
   type ListMemberDto,
 } from "@genesis-lists/shared";
 import type { Db, ItemRow, ListRow } from "../db/index.js";
-import { nowIso, requireUser, sendError, uuid } from "../util.js";
+import { nowIso, requireSessionUser, requireUser, sendError, uuid } from "../util.js";
 
 type ListAccess = "owner" | "member" | "none";
 
@@ -179,7 +179,7 @@ export async function registerListRoutes(
   opts: { directoryShowEmails: boolean } = { directoryShowEmails: true },
 ) {
   app.get("/api/users", async (request, reply) => {
-    const user = await requireUser(request, reply);
+    const user = await requireSessionUser(request, reply);
     if (!user) return;
 
     // Display names are not unique, so email breaks the tie in the ordering

@@ -1,13 +1,17 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import argon2 from "argon2";
+import { createHash, randomBytes } from "node:crypto";
 import {
   authCredentialsSchema,
   changePasswordSchema,
+  createApiTokenSchema,
   displayNameFromEmail,
   registerSchema,
   updateProfileSchema,
+  type ApiTokenDto,
   type AuthProvider,
+  type CreatedApiTokenDto,
   type UserDto,
 } from "@genesis-lists/shared";
 import { isUniqueViolation, type Db, type UserRow } from "../db/index.js";
@@ -26,11 +30,38 @@ import {
   SESSION_COOKIE,
   SESSION_DAYS,
   nowIso,
+  pathAllowsBearerAuth,
+  requireSessionUser,
   sendError,
   uuid,
   type RegistrationMode,
 } from "../util.js";
 import { z } from "zod";
+
+/** Prefix for personal access tokens (plaintext shown once on create). */
+const API_TOKEN_PREFIX = "gls_";
+
+function hashApiToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function generateApiToken(): string {
+  return `${API_TOKEN_PREFIX}${randomBytes(32).toString("base64url")}`;
+}
+
+function toApiTokenDto(row: {
+  id: string;
+  name: string;
+  created_at: string;
+  last_used_at: string | null;
+}): ApiTokenDto {
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
 
 function sessionExpiry() {
   const d = new Date();
@@ -148,24 +179,62 @@ export async function registerAuth(
     return unsigned.value;
   }
 
+  function readBearerToken(request: FastifyRequest): string | undefined {
+    const header = request.headers.authorization;
+    if (!header) return undefined;
+    const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+    if (!match) return undefined;
+    return match[1];
+  }
+
   app.addHook("preHandler", async (request) => {
     const sessionId = readSessionId(request);
-    if (!sessionId) return;
+    if (sessionId) {
+      const row = db
+        .prepare(
+          `SELECT u.id AS id, u.email AS email, u.name AS name
+           FROM sessions s
+           INNER JOIN users u ON u.id = s.user_id
+           WHERE s.id = ? AND s.expires_at > ?`,
+        )
+        .get(sessionId, nowIso()) as
+        | { id: string; email: string; name: string }
+        | undefined;
 
+      if (row) {
+        request.user = { id: row.id, email: row.email, name: row.name };
+        request.authMethod = "session";
+        return;
+      }
+    }
+
+    // PATs authenticate list/item APIs only — not account, directory, or token CRUD.
+    if (!pathAllowsBearerAuth(request.url)) return;
+
+    const bearer = readBearerToken(request);
+    if (!bearer || !bearer.startsWith(API_TOKEN_PREFIX)) return;
+
+    const tokenHash = hashApiToken(bearer);
     const row = db
       .prepare(
-        `SELECT u.id AS id, u.email AS email, u.name AS name
-         FROM sessions s
-         INNER JOIN users u ON u.id = s.user_id
-         WHERE s.id = ? AND s.expires_at > ?`,
+        `SELECT t.id AS token_id, u.id AS id, u.email AS email, u.name AS name
+         FROM api_tokens t
+         INNER JOIN users u ON u.id = t.user_id
+         WHERE t.token_hash = ?`,
       )
-      .get(sessionId, nowIso()) as
-      | { id: string; email: string; name: string }
+      .get(tokenHash) as
+      | { token_id: string; id: string; email: string; name: string }
       | undefined;
 
-    if (row) {
-      request.user = { id: row.id, email: row.email, name: row.name };
-    }
+    if (!row) return;
+
+    const usedAt = nowIso();
+    db.prepare(`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`).run(
+      usedAt,
+      row.token_id,
+    );
+    request.user = { id: row.id, email: row.email, name: row.name };
+    request.authMethod = "bearer";
   });
 
   function setSessionCookie(reply: FastifyReply, sessionId: string) {
@@ -654,9 +723,8 @@ export async function registerAuth(
   });
 
   app.post("/api/auth/logout", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const user = await requireSessionUser(request, reply);
+    if (!user) return;
     const sessionId = readSessionId(request);
     if (sessionId) {
       db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
@@ -666,10 +734,9 @@ export async function registerAuth(
   });
 
   app.get("/api/auth/me", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
-    const user = toUserDto(request.user.id);
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
+    const user = toUserDto(sessionUser.id);
     if (!user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -677,9 +744,8 @@ export async function registerAuth(
   });
 
   app.patch("/api/auth/me", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
 
     const parsed = updateProfileSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -688,10 +754,10 @@ export async function registerAuth(
 
     db.prepare(`UPDATE users SET name = ? WHERE id = ?`).run(
       parsed.data.name,
-      request.user.id,
+      sessionUser.id,
     );
 
-    const user = toUserDto(request.user.id);
+    const user = toUserDto(sessionUser.id);
     if (!user) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -699,9 +765,8 @@ export async function registerAuth(
   });
 
   app.post("/api/auth/change-password", async (request, reply) => {
-    if (!request.user) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
-    }
+    const sessionUser = await requireSessionUser(request, reply);
+    if (!sessionUser) return;
 
     const parsed = changePasswordSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -711,7 +776,7 @@ export async function registerAuth(
     const { currentPassword, newPassword } = parsed.data;
     const row = db
       .prepare(`SELECT * FROM users WHERE id = ?`)
-      .get(request.user.id) as UserRow | undefined;
+      .get(sessionUser.id) as UserRow | undefined;
     if (!row) {
       return sendError(reply, 401, "UNAUTHORIZED", "Authentication required");
     }
@@ -732,19 +797,86 @@ export async function registerAuth(
     const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
     db.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).run(
       passwordHash,
-      request.user.id,
+      sessionUser.id,
     );
 
+    // Lockout: invalidate other sessions and revoke all PATs.
     const sessionId = readSessionId(request);
     if (sessionId) {
       db.prepare(`DELETE FROM sessions WHERE user_id = ? AND id != ?`).run(
-        request.user.id,
+        sessionUser.id,
         sessionId,
       );
     } else {
-      db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(request.user.id);
+      db.prepare(`DELETE FROM sessions WHERE user_id = ?`).run(sessionUser.id);
+    }
+    db.prepare(`DELETE FROM api_tokens WHERE user_id = ?`).run(sessionUser.id);
+
+    return reply.status(204).send();
+  });
+
+  app.get("/api/auth/tokens", async (request, reply) => {
+    const user = await requireSessionUser(request, reply);
+    if (!user) return;
+
+    const rows = db
+      .prepare(
+        `SELECT id, name, created_at, last_used_at
+         FROM api_tokens
+         WHERE user_id = ?
+         ORDER BY created_at DESC`,
+      )
+      .all(user.id) as Array<{
+      id: string;
+      name: string;
+      created_at: string;
+      last_used_at: string | null;
+    }>;
+
+    return reply.send({ tokens: rows.map(toApiTokenDto) });
+  });
+
+  app.post("/api/auth/tokens", async (request, reply) => {
+    const user = await requireSessionUser(request, reply);
+    if (!user) return;
+
+    const parsed = createApiTokenSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return sendError(reply, 400, "VALIDATION_ERROR", validationDetail(parsed.error));
     }
 
+    const id = uuid();
+    const token = generateApiToken();
+    const tokenHash = hashApiToken(token);
+    const createdAt = nowIso();
+
+    db.prepare(
+      `INSERT INTO api_tokens (id, user_id, name, token_hash, created_at, last_used_at)
+       VALUES (?, ?, ?, ?, ?, NULL)`,
+    ).run(id, user.id, parsed.data.name, tokenHash, createdAt);
+
+    const body: CreatedApiTokenDto = {
+      id,
+      name: parsed.data.name,
+      createdAt,
+      lastUsedAt: null,
+      token,
+    };
+    return reply.status(201).send(body);
+  });
+
+  app.delete("/api/auth/tokens/:id", async (request, reply) => {
+    const user = await requireSessionUser(request, reply);
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const result = db
+      .prepare(`DELETE FROM api_tokens WHERE id = ? AND user_id = ?`)
+      .run(id, user.id);
+
+    if (Number(result.changes) === 0) {
+      return sendError(reply, 404, "NOT_FOUND", "Not found");
+    }
     return reply.status(204).send();
   });
 }

@@ -1,5 +1,6 @@
 package uk.co.xeiverse.genesislists.ui.screens.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,9 +8,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -26,6 +31,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -45,13 +51,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import uk.co.xeiverse.genesislists.data.ListsRepository
 import uk.co.xeiverse.genesislists.data.OfflineMutationException
 import uk.co.xeiverse.genesislists.data.api.ListItemDto
 import uk.co.xeiverse.genesislists.data.api.UpdateItemBody
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,14 +83,20 @@ fun ListDetailScreen(
     var newText by remember { mutableStateOf("") }
     var tickedExpanded by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
-    var renameOpen by remember { mutableStateOf(false) }
     var deleteListOpen by remember { mutableStateOf(false) }
     var clearCheckedOpen by remember { mutableStateOf(false) }
-    var draftName by remember { mutableStateOf("") }
-    var editingItem by remember { mutableStateOf<ListItemDto?>(null) }
-    var editText by remember { mutableStateOf("") }
+    var editingTitle by remember { mutableStateOf(false) }
+    var titleDraft by remember { mutableStateOf(TextFieldValue("")) }
+    var editingItemId by remember { mutableStateOf<String?>(null) }
+    var editDraft by remember { mutableStateOf(TextFieldValue("")) }
+    var skipTitleBlurSave by remember { mutableStateOf(false) }
+    var skipItemBlurSave by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val titleFocusRequester = remember { FocusRequester() }
+    val itemFocusRequester = remember { FocusRequester() }
 
     fun refresh() {
         scope.launch {
@@ -94,6 +115,18 @@ fun ListDetailScreen(
 
     LaunchedEffect(listId) { refresh() }
 
+    LaunchedEffect(editingTitle) {
+        if (editingTitle) {
+            titleFocusRequester.requestFocus()
+        }
+    }
+
+    LaunchedEffect(editingItemId) {
+        if (editingItemId != null) {
+            itemFocusRequester.requestFocus()
+        }
+    }
+
     val openItems = remember(items) { items.filter { !it.checked }.sortedBy { it.position } }
     val tickedItems = remember(items) { items.filter { it.checked }.sortedBy { it.position } }
 
@@ -109,12 +142,135 @@ fun ListDetailScreen(
         }
     }
 
+    fun startTitleEdit() {
+        if (!online) return
+        val name = list?.name.orEmpty()
+        skipTitleBlurSave = false
+        titleDraft = TextFieldValue(name, TextRange(0, name.length))
+        editingTitle = true
+    }
+
+    fun commitTitleEdit() {
+        val name = titleDraft.text.trim()
+        val current = list?.name.orEmpty()
+        if (name.isEmpty() || name == current) {
+            editingTitle = false
+            titleDraft = TextFieldValue("")
+            focusManager.clearFocus()
+            keyboardController?.hide()
+            return
+        }
+        gateOnline {
+            repository.renameList(listId, name)
+            editingTitle = false
+            titleDraft = TextFieldValue("")
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        }
+    }
+
+    fun startItemEdit(item: ListItemDto) {
+        if (!online) return
+        if (editingItemId != null && editingItemId != item.id) {
+            // Commit the previous row before switching.
+            val previousId = editingItemId!!
+            val text = editDraft.text.trim()
+            val previous = items.find { it.id == previousId }
+            if (previous != null && text.isNotEmpty() && text != previous.text) {
+                gateOnline {
+                    repository.updateItem(previousId, listId, UpdateItemBody(text = text))
+                }
+            }
+        }
+        skipItemBlurSave = false
+        editDraft = TextFieldValue(item.text, TextRange(0, item.text.length))
+        editingItemId = item.id
+    }
+
+    fun cancelItemEdit() {
+        skipItemBlurSave = true
+        editingItemId = null
+        editDraft = TextFieldValue("")
+        focusManager.clearFocus()
+        keyboardController?.hide()
+    }
+
+    fun commitItemEdit() {
+        val id = editingItemId ?: return
+        val text = editDraft.text.trim()
+        val current = items.find { it.id == id }?.text.orEmpty()
+        if (text.isEmpty() || text == current) {
+            editingItemId = null
+            editDraft = TextFieldValue("")
+            focusManager.clearFocus()
+            keyboardController?.hide()
+            return
+        }
+        gateOnline {
+            repository.updateItem(id, listId, UpdateItemBody(text = text))
+            editingItemId = null
+            editDraft = TextFieldValue("")
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        }
+    }
+
+    fun submitNewItem() {
+        val text = newText.trim()
+        if (text.isEmpty() || !online) return
+        gateOnline {
+            repository.createItem(listId, text)
+            newText = ""
+            focusManager.clearFocus()
+            keyboardController?.hide()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(list?.name ?: "List")
+                        if (editingTitle) {
+                            BasicTextField(
+                                value = titleDraft,
+                                onValueChange = { titleDraft = it },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.titleLarge.copy(
+                                    color = LocalContentColor.current,
+                                ),
+                                cursorBrush = SolidColor(LocalContentColor.current),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        skipTitleBlurSave = true
+                                        commitTitleEdit()
+                                    },
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(titleFocusRequester)
+                                    .onFocusChanged { state ->
+                                        if (!state.isFocused && editingTitle) {
+                                            if (skipTitleBlurSave) {
+                                                skipTitleBlurSave = false
+                                            } else {
+                                                commitTitleEdit()
+                                            }
+                                        }
+                                    },
+                            )
+                        } else {
+                            Text(
+                                list?.name ?: "List",
+                                modifier = if (online) {
+                                    Modifier.clickable(onClick = { startTitleEdit() })
+                                } else {
+                                    Modifier
+                                },
+                                maxLines = 1,
+                            )
+                        }
                         if (!online) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.CloudOff, null, modifier = Modifier.height(14.dp))
@@ -129,19 +285,11 @@ fun ListDetailScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Menu")
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Rename") },
-                            onClick = {
-                                menuOpen = false
-                                draftName = list?.name.orEmpty()
-                                renameOpen = true
-                            },
-                        )
-                        if (list?.isOwner != false) {
+                    if (list?.isOwner != false) {
+                        IconButton(onClick = { menuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                        }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("Delete list") },
                                 onClick = {
@@ -159,7 +307,8 @@ fun ListDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imePadding(),
         ) {
             PullToRefreshBox(
                 isRefreshing = refreshing,
@@ -184,6 +333,9 @@ fun ListDetailScreen(
                         ItemRow(
                             item = item,
                             enabled = online,
+                            isEditing = editingItemId == item.id,
+                            editText = editDraft,
+                            focusRequester = itemFocusRequester,
                             onToggle = {
                                 gateOnline {
                                     repository.updateItem(
@@ -193,11 +345,21 @@ fun ListDetailScreen(
                                     )
                                 }
                             },
-                            onEdit = {
-                                editingItem = item
-                                editText = item.text
+                            onStartEdit = { startItemEdit(item) },
+                            onEditTextChange = { editDraft = it },
+                            onCommit = {
+                                skipItemBlurSave = true
+                                commitItemEdit()
+                            },
+                            onBlurCommit = {
+                                if (skipItemBlurSave) {
+                                    skipItemBlurSave = false
+                                } else {
+                                    commitItemEdit()
+                                }
                             },
                             onDelete = {
+                                if (editingItemId == item.id) cancelItemEdit()
                                 gateOnline { repository.deleteItem(item.id, listId) }
                             },
                         )
@@ -232,6 +394,9 @@ fun ListDetailScreen(
                                     item = item,
                                     enabled = online,
                                     dimmed = true,
+                                    isEditing = editingItemId == item.id,
+                                    editText = editDraft,
+                                    focusRequester = itemFocusRequester,
                                     onToggle = {
                                         gateOnline {
                                             repository.updateItem(
@@ -241,11 +406,21 @@ fun ListDetailScreen(
                                             )
                                         }
                                     },
-                                    onEdit = {
-                                        editingItem = item
-                                        editText = item.text
+                                    onStartEdit = { startItemEdit(item) },
+                                    onEditTextChange = { editDraft = it },
+                                    onCommit = {
+                                        skipItemBlurSave = true
+                                        commitItemEdit()
+                                    },
+                                    onBlurCommit = {
+                                        if (skipItemBlurSave) {
+                                            skipItemBlurSave = false
+                                        } else {
+                                            commitItemEdit()
+                                        }
                                     },
                                     onDelete = {
+                                        if (editingItemId == item.id) cancelItemEdit()
                                         gateOnline { repository.deleteItem(item.id, listId) }
                                     },
                                 )
@@ -266,52 +441,18 @@ fun ListDetailScreen(
                     label = { Text(if (online) "Add item" else "Offline — viewing only") },
                     singleLine = true,
                     enabled = online,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { submitNewItem() }),
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
-                    onClick = {
-                        val text = newText.trim()
-                        if (text.isEmpty()) return@IconButton
-                        gateOnline {
-                            repository.createItem(listId, text)
-                            newText = ""
-                        }
-                    },
+                    onClick = { submitNewItem() },
                     enabled = online && newText.trim().isNotEmpty(),
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Add")
                 }
             }
         }
-    }
-
-    if (renameOpen) {
-        AlertDialog(
-            onDismissRequest = { renameOpen = false },
-            title = { Text("Rename list") },
-            text = {
-                OutlinedTextField(
-                    value = draftName,
-                    onValueChange = { draftName = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        gateOnline {
-                            repository.renameList(listId, draftName.trim())
-                            renameOpen = false
-                        }
-                    },
-                    enabled = draftName.trim().isNotEmpty(),
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameOpen = false }) { Text("Cancel") }
-            },
-        )
     }
 
     if (deleteListOpen) {
@@ -346,45 +487,17 @@ fun ListDetailScreen(
                         gateOnline {
                             repository.clearChecked(listId)
                             clearCheckedOpen = false
+                            if (editingItemId != null &&
+                                items.find { it.id == editingItemId }?.checked == true
+                            ) {
+                                cancelItemEdit()
+                            }
                         }
                     },
                 ) { Text("Clear") }
             },
             dismissButton = {
                 TextButton(onClick = { clearCheckedOpen = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    editingItem?.let { item ->
-        AlertDialog(
-            onDismissRequest = { editingItem = null },
-            title = { Text("Edit item") },
-            text = {
-                OutlinedTextField(
-                    value = editText,
-                    onValueChange = { editText = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        gateOnline {
-                            repository.updateItem(
-                                item.id,
-                                listId,
-                                UpdateItemBody(text = editText.trim()),
-                            )
-                            editingItem = null
-                        }
-                    },
-                    enabled = editText.trim().isNotEmpty(),
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingItem = null }) { Text("Cancel") }
             },
         )
     }
@@ -395,10 +508,26 @@ private fun ItemRow(
     item: ListItemDto,
     enabled: Boolean,
     dimmed: Boolean = false,
+    isEditing: Boolean,
+    editText: TextFieldValue,
+    focusRequester: FocusRequester,
     onToggle: () -> Unit,
-    onEdit: () -> Unit,
+    onStartEdit: () -> Unit,
+    onEditTextChange: (TextFieldValue) -> Unit,
+    onCommit: () -> Unit,
+    onBlurCommit: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val textColor = if (dimmed) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val textStyle = MaterialTheme.typography.bodyLarge.copy(
+        color = textColor,
+        textDecoration = if (item.checked && !isEditing) TextDecoration.LineThrough else null,
+    )
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -408,28 +537,40 @@ private fun ItemRow(
             onCheckedChange = { if (enabled) onToggle() },
             enabled = enabled,
         )
-        Text(
-            item.text,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 8.dp)
-                .then(
-                    if (enabled) {
-                        Modifier
-                    } else {
-                        Modifier
+        if (isEditing) {
+            BasicTextField(
+                value = editText,
+                onValueChange = onEditTextChange,
+                singleLine = true,
+                textStyle = textStyle,
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onCommit() }),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+                    .focusRequester(focusRequester)
+                    .onFocusChanged { state ->
+                        if (!state.isFocused && isEditing) {
+                            onBlurCommit()
+                        }
                     },
-                ),
-            textDecoration = if (item.checked) TextDecoration.LineThrough else null,
-            color = if (dimmed) {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            style = MaterialTheme.typography.bodyLarge,
-        )
+            )
+        } else {
+            Text(
+                item.text,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+                    .then(
+                        if (enabled) Modifier.clickable(onClick = onStartEdit) else Modifier,
+                    ),
+                textDecoration = if (item.checked) TextDecoration.LineThrough else null,
+                color = textColor,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
         if (enabled) {
-            TextButton(onClick = onEdit) { Text("Edit") }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Default.Delete, contentDescription = "Delete item")
             }

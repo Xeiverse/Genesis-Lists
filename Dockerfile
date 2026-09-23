@@ -24,7 +24,7 @@ RUN apt-get update \
   && chown app:app /data
 
 WORKDIR /app
-ARG APP_VERSION=0.3.1
+ARG APP_VERSION=0.3.2
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV DATABASE_PATH=/data/app.db

@@ -31,7 +31,7 @@ docker compose up -d --build
 
 Open http://localhost:3000 and create an account. Local Compose leaves `COOKIE_SECURE=false` (plain HTTP) and `ALLOW_REGISTRATION=true` (anyone who can open the URL can register). That is fine on your machine. Do not publish port 3000 to the internet with those defaults.
 
-Until a release image is on GHCR, `--build` is required. After `v0.3.1` is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
+Until a release image is on GHCR, `--build` is required. After `v0.3.2` is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
 
 ## 2. Production
 
@@ -123,7 +123,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `DIRECTORY_SHOW_EMAILS` | No | `true` | Whether `GET /api/users` returns each account's email address. Display names are not unique, so with this off two people sharing a name are indistinguishable in the share picker. Either way every account stays in the directory, because sharing needs it |
 | `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
 | `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
-| `GENESIS_LISTS_VERSION` | No | `0.3.1` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
+| `GENESIS_LISTS_VERSION` | No | `0.3.2` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
 | `PUBLIC_BASE_URL` | When OIDC enabled (unless `OIDC_REDIRECT_URI` set) | — | Canonical public origin, e.g. `https://lists.example.com` (no trailing path). Used to build the OIDC redirect URI |
 | `OIDC_ENABLED` | No | `false` | Enable OpenID Connect login |
 | `OIDC_ISSUER_URL` | When OIDC enabled | — | IdP issuer / discovery base (`.well-known/openid-configuration` optional) |
@@ -229,10 +229,10 @@ docker compose up -d
 
 ### Upgrade
 
-Image tags such as `0.3.1` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
+Image tags such as `0.3.2` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
 
 1. Back up (above).
-2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `0.3.1`).
+2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `0.3.2`).
 3. Pull and recreate, keeping the same volume:
 
 ```bash

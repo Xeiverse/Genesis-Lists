@@ -2,7 +2,17 @@
 
 ## Unreleased
 
+## 0.3.2
+
+### Personal access tokens
+
 - Personal access tokens (Bearer) for list/item APIs: create/list/revoke via session (`/api/auth/tokens`), Settings UI, schema version 6 (`api_tokens` stores hash only)
+
+### Android
+
+- List detail editing is inline and keyboard-aware
+- OIDC via Custom Tabs keeps CSRF protection by setting the state cookie on an HTML interstitial, and skips the state cookie on the Custom Tabs bounce that Chrome drops
+- `email_verified` is optional for Authentik local users
 
 ## 0.3.1
 

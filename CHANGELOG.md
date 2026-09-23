@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Android: ticking or editing a list item no longer sends `null` for omitted PATCH fields (`text`/`position`), which the API rejects as Invalid request body
+
 ## 0.3.2
 
 ### Personal access tokens

@@ -137,6 +137,8 @@ class GenesisApiClient(
         val defaultJson = Json {
             ignoreUnknownKeys = true
             encodeDefaults = true
+            // Omit null optional fields; Zod treats null as invalid, not "unset".
+            explicitNulls = false
             isLenient = true
         }
 

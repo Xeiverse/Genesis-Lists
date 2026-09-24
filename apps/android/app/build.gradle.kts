@@ -21,7 +21,7 @@ android {
 
     val releaseVersionName =
         (project.findProperty("versionName") as String?)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: "0.3.1"
+            ?: "0.3.2"
     val releaseVersionCode =
         (project.findProperty("versionCode") as String?)?.toIntOrNull()
             ?: semverVersionCode(releaseVersionName)

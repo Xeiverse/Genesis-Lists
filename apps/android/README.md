@@ -25,7 +25,7 @@ Tagged releases also run [Android Release](../../.github/workflows/android-relea
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-Release APK: `app/build/outputs/apk/release/app-release.apk` (override version with `-PversionName=0.3.1`)
+Release APK: `app/build/outputs/apk/release/app-release.apk` (override version with `-PversionName=0.3.2`)
 
 Install on a device/emulator:
 

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Android: ticking or editing a list item no longer sends `null` for omitted PATCH fields (`text`/`position`), which the API rejects as Invalid request body
+- Android: list-detail inline edit no longer aborts tap-to-edit when a field attaches, double-counts the IME inset, or dismisses the keyboard after adding an item; the Rename menu and accessibility labels are restored and Back cancels an in-progress edit
 
 ## 0.3.2
 
@@ -12,7 +13,7 @@
 
 ### Android
 
-- List detail editing is inline and keyboard-aware
+- List detail editing is inline and keyboard-aware (the focus-race / IME follow-up is not in this tag; see Unreleased)
 - OIDC via Custom Tabs keeps CSRF protection by setting the state cookie on an HTML interstitial, and skips the state cookie on the Custom Tabs bounce that Chrome drops
 - `email_verified` is optional for Authentik local users
 

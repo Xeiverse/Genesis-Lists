@@ -31,7 +31,7 @@ docker compose up -d --build
 
 Open http://localhost:3000 and create an account. Local Compose leaves `COOKIE_SECURE=false` (plain HTTP) and `ALLOW_REGISTRATION=true` (anyone who can open the URL can register). That is fine on your machine. Do not publish port 3000 to the internet with those defaults.
 
-Until a release image is on GHCR, `--build` is required. After `v0.3.2` is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
+Until a release image is on GHCR, `--build` is required. After `v0.4.0` is published, `docker compose pull` uses `ghcr.io/xeiverse/genesis-lists`.
 
 ## 2. Production
 
@@ -123,7 +123,7 @@ If the instance is reachable from the public internet, rate-limit `POST /api/aut
 | `DIRECTORY_SHOW_EMAILS` | No | `true` | Whether `GET /api/users` returns each account's email address. Display names are not unique, so with this off two people sharing a name are indistinguishable in the share picker. Either way every account stays in the directory, because sharing needs it |
 | `STATIC_DIR` | No | `/app/web` in the Docker image | Directory of the built SPA |
 | `APP_VERSION` | No | Server package version | Reported by `/api/health`. Set from the image tag in Compose (`GENESIS_LISTS_VERSION`) |
-| `GENESIS_LISTS_VERSION` | No | `0.3.2` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
+| `GENESIS_LISTS_VERSION` | No | `0.4.0` | Compose-only. Image tag to pull, and the `APP_VERSION` passed into the container |
 | `PUBLIC_BASE_URL` | When OIDC enabled (unless `OIDC_REDIRECT_URI` set) | — | Canonical public origin, e.g. `https://lists.example.com` (no trailing path). Used to build the OIDC redirect URI |
 | `OIDC_ENABLED` | No | `false` | Enable OpenID Connect login |
 | `OIDC_ISSUER_URL` | When OIDC enabled | — | IdP issuer / discovery base (`.well-known/openid-configuration` optional) |
@@ -229,10 +229,10 @@ docker compose up -d
 
 ### Upgrade
 
-Image tags such as `0.3.2` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
+Image tags such as `0.4.0` are immutable. Pin `GENESIS_LISTS_VERSION` in `.env`. Do not follow `latest` for an install you need to roll back.
 
 1. Back up (above).
-2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `0.3.2`).
+2. Set `GENESIS_LISTS_VERSION` to the new tag (for example `0.4.0`).
 3. Pull and recreate, keeping the same volume:
 
 ```bash
@@ -257,7 +257,7 @@ Changing `SESSION_SECRET` invalidates every signed cookie. Everyone must log in 
 |---------|----------------|
 | Container exits immediately, log says `SESSION_SECRET is required` | `COOKIE_SECURE=true` with a missing, short, or placeholder secret. Generate a new one and recreate. |
 | Login works, then you are logged out | `COOKIE_SECURE` does not match the URL scheme. HTTPS requires `true`. HTTP (localhost only) requires `false`. |
-| Android login then **Authentication required**, or a Secure-cookie hint | `COOKIE_SECURE=true` on an `http://` LAN URL. The Android 0.3.x app detects a `Secure` session cookie after password login and spells this out; set `COOKIE_SECURE=false` for HTTP-only Compose or use HTTPS. Recreate the container after changing env. |
+| Android login then **Authentication required**, or a Secure-cookie hint | `COOKIE_SECURE=true` on an `http://` LAN URL. The Android companion detects a `Secure` session cookie after password login and spells this out; set `COOKIE_SECURE=false` for HTTP-only Compose or use HTTPS. Recreate the container after changing env. |
 | Android **OIDC sign-in failed** on `http://` | Possible cookie mismatch as above, but Custom Tabs cannot see the `Secure` flag. Also check redirect URI and email claims in the [Authentik guide](guides/oauth-authentik.md). On production, point the app at the HTTPS origin rather than turning `COOKIE_SECURE` off. |
 | Empty lists after an update | Volume name changed (`docker volume ls`). Point Compose back at the volume that has `app.db`. |
 | `EACCES` writing `/data` | Volume is still owned by root. `chown` to `10001:10001` as above. |

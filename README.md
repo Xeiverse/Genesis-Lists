@@ -6,7 +6,7 @@ Open-source, self-hostable list app (shopping lists first). Built with Spec-Driv
 
 The application icon is Material Symbols Receipt Long on the primary green tile. See [UI/UX](docs/05-ui-ux.md).
 
-**Version:** 0.4.0 — email login, native Android companion, sharing, optional OIDC, and personal access tokens. Android list editing no longer sends rejected PATCH bodies, and inline edit follows the keyboard. PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v0.4.0` release publishes `ghcr.io/xeiverse/genesis-lists` and attaches the Android APK.
+**Version:** 0.4.0 — email login, native Android companion, sharing, optional OIDC, and personal access tokens. This tag aligns package, image, Compose, and Android version labels; the Android list-editing fixes shipped in 0.3.3. PWA remains on the [roadmap](docs/08-roadmap.md). A tagged `v0.4.0` release publishes `ghcr.io/xeiverse/genesis-lists` and attaches the Android APK.
 
 ## Features
 

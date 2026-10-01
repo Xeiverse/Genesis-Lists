@@ -2,12 +2,18 @@
 
 ## 0.4.0
 
+Package, image, Compose, OpenAPI, and Android `versionName` labels aligned to 0.4.0. The Android PATCH-null and inline-edit keyboard follow-up already shipped in **0.3.3** (tagged on the 0.3.2-labeled tree). This release makes `/api/health`, Compose defaults, and the APK `versionName` match.
+
+No schema change. Existing databases upgrade in place.
+
+## 0.3.3
+
+Tagged on `master` after PR #19. In-tree package, Dockerfile, and Android defaults still said 0.3.2; GHCR `APP_VERSION` and the APK `versionName` used the git tag (`0.3.3`).
+
 ### Android
 
 - Ticking or editing a list item no longer sends `null` for omitted PATCH fields (`text`/`position`), which the API rejects as Invalid request body
 - List-detail inline edit no longer aborts tap-to-edit when a field attaches, double-counts the IME inset, or dismisses the keyboard after adding an item; the Rename menu and accessibility labels are restored and Back cancels an in-progress edit
-
-No schema change. Existing databases upgrade in place.
 
 ## 0.3.2
 
@@ -17,7 +23,7 @@ No schema change. Existing databases upgrade in place.
 
 ### Android
 
-- List detail editing is inline and keyboard-aware (the focus-race / IME follow-up shipped in 0.4.0)
+- List detail editing is inline and keyboard-aware (the focus-race / IME follow-up shipped in 0.3.3; 0.4.0 is the matching version pin)
 - OIDC via Custom Tabs keeps CSRF protection by setting the state cookie on an HTML interstitial, and skips the state cookie on the Custom Tabs bounce that Chrome drops
 - `email_verified` is optional for Authentik local users
 
